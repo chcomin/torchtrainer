@@ -1,0 +1,5 @@
+Drive data should be put in this folder, organized as follows:
+
+-DRIVE
+ |-images  (train, validation and test)
+ |-labels  (train, validation and, optionally, test)
