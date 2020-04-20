@@ -92,7 +92,7 @@ def notebook2scriptSingle(fname):
         output_path = gparent/dir_name/fname_out
         with io.open(output_path, "w", encoding="utf-8") as f:
             f.write(modules[fname_out][:-2])
-        print(f"Converted {fname_out} to {output_path}")
+        print(f"Converted {fname_out} to {dir_name}/{fname_out}")
 
 if __name__ == '__main__': fire.Fire(notebook2script)
 
