@@ -107,9 +107,9 @@ class ImageDataset(torch_dataset.Dataset):
 
         if self.weight_func is not None:
             weight = self.weight_func(img, label, img_file_path)
-            ret_transf = self.apply_transforms(img, label, weight)
+            ret_transf = self.apply_transforms(self.transforms, img, label, weight)
         else:
-            ret_transf = self.apply_transforms(img, label)
+            ret_transf = self.apply_transforms(self.transforms, img, label)
 
         return ret_transf
 
@@ -263,190 +263,15 @@ class ImageDataset(torch_dataset.Dataset):
 
         return tensors
 
-    def apply_transforms(self, img, label, weight=None):
-        '''Apply transformations stored in self.transforms
+    def apply_transforms(self, transforms, img, label, weight=None):
+        '''Apply transformations stored in transforms
 
         Parameters
         ----------
-        img, label, weight : Image-like
-            Images to be processed
-
-        Returns
-        -------
-        vals : Image-like
-            Resulting images. Either (img, label) if weight is None or (img, label, weight) otherwise
-        '''
-
-        if weight is None:
-            vals = [img, label]
-        else:
-            vals = [img, label, weight]
-        for transform in self.transforms:
-                vals = transform(*vals)
-        return vals
-
-'''
-Patchwise image dataset storage
-'''
-
-class ImagePatchDataset(ImageDataset):
-
-    def __init__(self, img_dir, label_dir, name_2_label_map, patch_size, filename_filter=None, img_opener=None,
-                 label_opener=None, transforms=None, img_transforms=None, weight_func=None, stride=None):
-
-        super(ImagePatchDataset, self).__init__(img_dir, label_dir, name_2_label_map, filename_filter=filename_filter,
-                                                img_opener=img_opener, label_opener=label_opener, transforms=transforms,
-                                                weight_func=weight_func)
-
-        if stride is None:
-            stride = patch_size
-        if isinstance(stride, int):
-            stride = (stride, stride)
-        if img_transforms is None:
-            img_transforms = []
-
-        self.patch_size = patch_size
-        self.stride = stride
-        self.img_transforms = img_transforms
-
-        self.generate_patches_corners_for_dataset()
-
-    def __getitem__(self, idx):
-        '''Returns one item from the dataset. Will return an image and label if weight_func was
-        not defined during class instantiation or an aditional weight image otherwise.'''
-
-        img_index, patch_corners = self.patches_corners[idx]
-        #first_row, first_col, last_row, last_col = patch_corners
-        img_file_path = self.img_file_paths[img_index]
-
-        # Open image and label
-        img = self.img_opener(img_file_path)
-        label_file_path = self.label_path_from_image_path(img_file_path)
-        label = self.label_opener(label_file_path)
-
-        if self.weight_func is not None:
-            weight = self.weight_func(img, label, img_file_path)
-            # Apply transforms on entire image
-            img, label, weight = self.apply_transforms(self.img_transforms, img, label, weight)
-        else:
-            img, label = self.apply_transforms(self.img_transforms, img, label)
-
-        img_patch = self.crop_img(img, patch_corners)
-        label_patch = self.crop_img(label, patch_corners)
-
-        if self.weight_func is not None:
-            weight_patch = self.crop_img(weight, patch_corners)
-            # Apply transforms on patch
-            ret_transf = self.apply_transforms(self.transforms, img_patch, label_patch, weight_patch)
-        else:
-            ret_transf = self.apply_transforms(self.transforms, img_patch, label_patch)
-
-        return ret_transf
-
-    def __len__(self):
-        return len(self.patches_corners)
-
-    def apply_transforms(self, transforms, img, label, weight=None):
-        pass
-
-    def apply_transforms_to_full_image(self, img, label, weight=None):
-        pass
-
-    def get_patch_coords_from_index(self, row, col):
-        pass
-
-    def generate_patches_corners_for_dataset(self, img_shape=None):
-        '''If img_shape is None, generates indices by opening each image to get the
-        respective shape. This is useful when images have distinct sizes. If img_shape
-        is not None, uses that shape and the images are not opened, which is much faster.'''
-
-        if img_shape is None:
-            must_open = True
-        else:
-            must_open = False
-
-        self.patches_corners = []
-        self.patch_index_accumulator = [0]
-        for img_idx, img_file_path in enumerate(self.img_file_paths):
-            if must_open:
-                try:
-                    img = self.img_opener(img_file_path)
-                except Exception:
-                    raise Exception(f'Cannot open image {img_file_path}\n')
-                img_shape = self.get_shape(img)
-            patches_corners_img = self.generate_patches_corners_for_image(self.patch_size, self.stride, img_shape)
-            self.patches_corners.extend(zip([img_idx]*len(patches_corners_img), patches_corners_img))
-
-    def generate_patches_corners_for_image(self, patch_size, stride, img_shape):
-
-        #patch_count = 0
-        patches_corners = []
-        for row in range(0, img_shape[0]-patch_size[0]+stride[0], stride[0]):
-            if (row+patch_size[0])>=img_shape[0]:
-                # Do not go over image border
-                row = img_shape[0] - patch_size[0]
-            for col in range(0, img_shape[1]-patch_size[1]+stride[1], stride[1]):
-                if (col+patch_size[1])>=img_shape[1]:
-                    # Do not go over image border
-                    col = img_shape[1] - patch_size[1]
-
-                patch_corners = [row, col, row+patch_size[0], col+patch_size[1]]
-                patches_corners.append(patch_corners)
-                #patch_count += 1
-        #self.patch_index_accumulator.append(self.patch_index_accumulator[-1] + patch_count)
-        return patches_corners
-
-
-    def get_patch_from_index(self, index, img_shape):
-        pass
-
-
-
-    def _num_patches_in_img(self, patch_size, stride, img_shape):
-
-        num_p_rows = (img_shape[0]-patch_size[0])//stride[0] + 1
-        if num_p_rows*stride[0]!=img_shape[0]:
-            # If patches do not fit perfectly
-            num_p_rows += 1
-        num_p_cols = (img_shape[1]-patch_size[1])//stride[1] + 1
-        if num_p_cols*stride[1]!=img_shape[1]:
-            # If patches do not fit perfectly
-            num_p_cols += 1
-
-        return num_p_rows*num_p_cols
-
-    def get_shape(self, img, warn=True):
-
-        if isinstance(img, Image.Image):
-            img_shape = (img_pil.height, img_pil.width)
-        elif isinstance(img, torch.Tensor) or isinstance(img, np.ndarray):
-            img_shape = img.shape
-            if (img.ndim>=3) and (img_shape[-1]<=3):
-                # Consider that last dimension is for color
-                img_shape = img_shape[:-1]
-            if min(img_shape)<=3:
-                print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 4 are being discarded')
-                img_shape = filter(lambda v:v>3, img_shape)
-        else:
-            raise AttributeError("Image is not a PIL, Tensor or ndarray. Cannot safely infer shape")
-
-        return img_shape
-
-    def crop_img(self, img, patch_corners):
-
-        first_row, first_col, last_row, last_col = patch_corners
-        if isinstance(img, Image.Image):
-            img_patch = img.crop([first_col, first_row, last_col, last_row])
-        else:
-            img_patch = img[first_row:last_row, first_col:last_col]
-        return img_patch
-
-    def apply_transforms(self, transforms, img, label, weight=None):
-        '''Apply transformations stored in self.transforms
-
-        Parameters
-        ----------
-        transforms : ??
+        transforms : list of functions
+            List of functions to be applied for image augmentation. Each function should have the signature
+            transform(img, label, weight=None) and return a tuple (img, label) in case weight is None
+            or (img, label, weight) otherwise.
         img, label, weight : Image-like
             Images to be processed
 
@@ -464,30 +289,285 @@ class ImagePatchDataset(ImageDataset):
                 vals = transform(*vals)
         return vals
 
+class ImageItem:
+
+    def __init__(self, img, label=None, weight=None):
+
+        self.img = img
+        self.label = label
+        self.weight = weight
+
+    def update_img(self, img): self.img = img
+    def update_label(self, label): self.label = label
+    def update_weight(self, weight): self.weight = weight
+    def get_img(self): return self.img
+    def get_label(self): return self.label
+    def get_weight(self): return self.weight
+    def get_items(self): return self.img, self.label, self.weight
+    def get_defined_items(self):
+        '''Return items that are not None in a list. If only the image has been defined, return
+        the image (not a list of one item).'''
+
+        ret = [self.img]
+        if self.label is not None: ret.append(self.label)
+        if self.weight is not None: ret.append(self.weight)
+        if len(ret)==1:
+            return ret[0]
+        else:
+            return ret
+
+    def has_label(self): return self.label is not None
+    def has_weight(self): return self.weight is not None
+
+    def apply_function(self, func, return_values=False, **kwargs):
+
+        self.img = func(self.img, **kwargs)
+        if self.label is not None: self.label = func(self.label, **kwargs)
+        if self.weight is not None: self.weight = func(self.weight, **kwargs)
+
+        if return_values:
+            ret = [self.img]
+            if self.label is not None: ret.append(self.label)
+            if self.weight is not None: ret.append(self.weight)
+            return ret
+
+
+'''
+Patchwise image dataset storage
+'''
+
+class ImagePatchDataset(ImageDataset):
+
+    def __init__(self, patch_size, *args, stride=None, patch_transforms=None, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        if stride is None:
+            stride = patch_size
+        if isinstance(stride, int):
+            stride = (stride,)*len(patch_size)
+        if patch_transforms is None:
+            patch_transforms = []
+
+        if len(patch_size)!=len(stride):
+            raise ValueError('`patch_size` and `stride` must have same length')
+
+        self.patch_size = patch_size
+        self.stride = stride
+        self.patch_transforms = patch_transforms
+
+        self.generate_patches_corners_for_dataset()
+
+    def __getitem__(self, idx):
+        '''Returns one item from the dataset. Will return an image and label if weight_func was
+        not defined during class instantiation or an aditional weight image otherwise.'''
+
+        img_index, patch_corners = self.patches_corners[idx]
+        ret = super().__getitem__(img_index)
+        if self.weight_func is None:
+            img, label = ret
+        else:
+            img, label, weight = ret
+
+        #first_row, first_col, last_row, last_col = patch_corners
+        img_patch = self.crop_img(img, patch_corners)
+        label_patch = self.crop_img(label, patch_corners)
+
+        if self.weight_func is not None:
+            weight_patch = self.crop_img(weight, patch_corners)
+            # Apply transforms on patch
+            ret_transf = self.apply_transforms(self.patch_transforms, img_patch, label_patch, weight_patch)
+        else:
+            ret_transf = self.apply_transforms(self.patch_transforms, img_patch, label_patch)
+
+        return ret_transf
+
+    def __len__(self):
+        return len(self.patches_corners)
+
+    def generate_patches_corners_for_dataset(self, img_shape=None):
+        '''If img_shape is None, generates indices by opening each image to get the
+        respective shape. This is useful when images have distinct sizes. If img_shape
+        is not None, uses that shape and the images are not opened, which is much faster.'''
+
+        if img_shape is None:
+            must_open = True
+        else:
+            must_open = False
+
+        self.patches_corners = []
+        self.patch_index_accumulator = [0]
+        for img_idx, img_file_path in enumerate(self.img_file_paths):
+            if must_open:
+                try:
+                    ret = super().__getitem__(img_idx)
+                except Exception:
+                    raise Exception(f'Cannot get image {img_file_path}\n')
+                img_shape = self.get_shape(ret[0])
+                if len(self.patch_size)!=len(img_shape):
+                    raise ValueError('Length of `patch_size` must be the same as image dimension')
+            patches_corners_img = self.generate_patches_corners_for_image(self.patch_size, self.stride, img_shape)
+            self.patches_corners.extend(zip([img_idx]*len(patches_corners_img), patches_corners_img))
+
+    def generate_patches_corners_for_image(self, patch_size, stride, img_shape):
+
+        if len(img_shape)==2:
+            patches_corners = self.generate_patches_corners_for_2d_image(patch_size, stride, img_shape)
+        elif len(img_shape)==3:
+            patches_corners = self.generate_patches_corners_for_3d_image(patch_size, stride, img_shape)
+        else:
+            raise Exception('Image must be 2D or 3D')
+
+        return patches_corners
+
+    def generate_patches_corners_for_2d_image(self, patch_size, stride, img_shape):
+
+        #patch_count = 0
+        patches_corners = []
+        for row in range(0, img_shape[0]-patch_size[0]+stride[0], stride[0]):
+            if (row+patch_size[0])>=img_shape[0]:
+                # Do not go over image border
+                row = img_shape[0] - patch_size[0]
+            for col in range(0, img_shape[1]-patch_size[1]+stride[1], stride[1]):
+                if (col+patch_size[1])>=img_shape[1]:
+                    # Do not go over image border
+                    col = img_shape[1] - patch_size[1]
+
+                patch_corners = (slice(row, row+patch_size[0]), slice(col, col+patch_size[1]))
+                patches_corners.append(patch_corners)
+                #patch_count += 1
+        #self.patch_index_accumulator.append(self.patch_index_accumulator[-1] + patch_count)
+        return patches_corners
+
+    def generate_patches_corners_for_3d_image(self, patch_size, stride, img_shape):
+
+        #patch_count = 0
+        patches_corners = []
+        for plane in range(0, img_shape[0]-patch_size[0]+stride[0], stride[0]):
+            if (plane+patch_size[0])>=img_shape[0]:
+                # Do not go over image border
+                plane = img_shape[0] - patch_size[0]
+            for row in range(0, img_shape[1]-patch_size[1]+stride[1], stride[1]):
+                if (row+patch_size[1])>=img_shape[1]:
+                    # Do not go over image border
+                    row = img_shape[1] - patch_size[1]
+                for col in range(0, img_shape[2]-patch_size[2]+stride[2], stride[2]):
+                    if (col+patch_size[2])>=img_shape[2]:
+                        # Do not go over image border
+                        col = img_shape[2] - patch_size[2]
+
+                    patch_corners = (slice(plane, plane+patch_size[0]), slice(row, row+patch_size[1]),
+                                     slice(col, col+patch_size[2]))
+                    patches_corners.append(patch_corners)
+
+        return patches_corners
+
+    def get_patch_from_index(self, index, img_shape):
+        pass
+
+    def get_shape(self, img, warn=True):
+
+        if isinstance(img, Image.Image):
+            img_shape = (img.height, img.width)
+        elif isinstance(img, torch.Tensor):
+            img_shape = img.shape
+            if (img.ndim==3):
+                if img_shape[-3]<=3:
+                    # Consider that third to last dimension is for color
+                    img_shape = img_shape[-2:]
+                else:
+                    img_shape = img_shape[-3:]
+            if (img.ndim==4):
+                img_shape = img_shape[-3:]
+        elif isinstance(img, np.ndarray):
+            img_shape = img.shape
+            if img.ndim==3:
+                if img_shape[-1]<=3:
+                    # Consider that last dimension is for color
+                    img_shape = img_shape[-3:-1]
+                else:
+                    img_shape = img_shape[-3:]
+            elif img.ndim==4:
+                img_shape = img_shape[-3:]
+        else:
+            raise AttributeError("Image is not a PIL, Tensor or ndarray. Cannot safely infer shape")
+
+        if min(img_shape)<=3:
+            print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 4 are being discarded')
+            img_shape = filter(lambda v:v>3, img_shape)
+
+        return img_shape
+
+    def crop_img(self, img, patch_corners):
+        '''TODO: Decide if we should include imgaug crop. Otherwise crop will not work if last
+        transform of self.img_transforms is from imgaug.'''
+
+        if isinstance(img, Image.Image):
+            first_row, last_row = patch_corners[0].start, patch_corners[0].stop
+            first_col, last_col = patch_corners[1].start, patch_corners[1].stop
+            img_patch = img.crop([first_col, first_row, last_col, last_row])
+        if isinstance(img, torch.Tensor):
+            # Crop from trailing dimensions
+            img_patch = img[(...,)+patch_corners]
+        else:
+            try:
+                img_patch = img[patch_corners]
+            except Exception:
+                raise IndexError(f'Cannot crop image of type {type(img)}')
+
+        #import pdb; pdb.set_trace()
+
+        return img_patch
+
     @classmethod
     def get_image_from_patches(cls, patches, stride, img_shape, operation='max'):
 
-        patch_size = patches[0]
-        img = np.zeros(img_shape, dtype=patches[0].dtype)
+        if not isinstance(patches[0], torch.Tensor):
+            patches = map(torch.tensor, patches)
+
+        patch_size = patches[0].shape
+        img = torch.zeros(img_shape, dtype=patches[0].dtype)
         patches_corners = cls.generate_patches_corners_for_image(patch_size, stride, img_shape)
 
         if operation=='mean':
-            img_count = np.zeros(img_shape, dtype=int)
+            img_count = torch.zeros(img_shape, dtype=int)
         for patch_corners, patch in zip(patches_corners, patches):
-            first_row, first_col, last_row, last_col = patch_corners
+            img_patch = img[patch_corners]
             if operation=='max':
-                img[first_row:last_row, first_col:last_col] = np.maximum(img[first_row:last_row, first_col:last_col], patch)
+                img_patch[:] = torch.where(img_patch>patch, img_patch, patch)
             elif operation=='min':
-                img[first_row:last_row, first_col:last_col] = np.minimum(img[first_row:last_row, first_col:last_col], patch)
+                img_patch[:] = torch.where(img_patch<patch, img_patch, patch)
             elif operation=='mean':
-                img[first_row:last_row, first_col:last_col] += patch
-                img_count[first_row:last_row, first_col:last_col] += 1
+                img_patch[:] = img_patch + patch
+                img_count[patch_corners] += 1
 
         if operation=='mean':
             mask = img_count>0
             img[mask] = img[mask]/img_count[mask]
 
         return img
+
+    # Functions with some ideas, not necessary for class
+    def crop_2d_img(self, img, patch_corners):
+
+        first_row, first_col, last_row, last_col = patch_corners
+        if isinstance(img, Image.Image):
+            img_patch = img.crop([first_col, first_row, last_col, last_row])
+        else:
+            img_patch = img[first_row:last_row, first_col:last_col]
+
+        return img_patch
+
+    def crop_3d_img(self, img, patch_corners):
+
+        first_plane, first_row, first_col, last_plane, last_row, last_col = patch_corners
+
+        if isinstance(img, Image.Image):
+            raise ValueError('Cannot interpret PIL image as 3D')
+        else:
+            img_patch = img[first_plane:last_plane, first_row:last_row, first_col:last_col]
+
+        return img_patch
 
     def generate_patch_index_accumulator(self, patch_size, stride=None, img_shape=None):
         '''If img_shape is None, generates indices by opening each image to get the
@@ -524,3 +604,15 @@ class ImagePatchDataset(ImageDataset):
         patch_index = index - self.patch_index_accumulator[img_index]
         get_patch_from_index(self, patch_index, img_shape)
 
+    def _num_patches_in_img(self, patch_size, stride, img_shape):
+
+        num_p_rows = (img_shape[0]-patch_size[0])//stride[0] + 1
+        if num_p_rows*stride[0]!=img_shape[0]:
+            # If patches do not fit perfectly
+            num_p_rows += 1
+        num_p_cols = (img_shape[1]-patch_size[1])//stride[1] + 1
+        if num_p_cols*stride[1]!=img_shape[1]:
+            # If patches do not fit perfectly
+            num_p_cols += 1
+
+        return num_p_rows*num_p_cols
