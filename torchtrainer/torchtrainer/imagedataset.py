@@ -148,7 +148,8 @@ class ImageDataset(torch_dataset.Dataset):
 
         print('All images read')
 
-    def split_train_val(self, valid_set=0.2):
+    @classmethod
+    def split_train_val(cls, valid_set=0.2):
         '''Split dataset into train and validation. Returns two new datasets.
 
         Parameters
@@ -167,7 +168,7 @@ class ImageDataset(torch_dataset.Dataset):
             Dataset to be used for validation
         '''
 
-        img_file_paths_train, img_file_paths_valid = self.split_train_val_paths(valid_set)
+        img_file_paths_train, img_file_paths_valid = cls.split_train_val_paths(img_file_paths, valid_set)
         # Hacky way to get parameters passed to __init__ during class construction
         init_pars_train = {}
         init_code = self.__init__.__code__
@@ -182,12 +183,13 @@ class ImageDataset(torch_dataset.Dataset):
         init_pars_train['filename_filter'] = img_file_paths_train
         init_pars_valid['filename_filter'] = img_file_paths_valid
 
-        train_dataset = ImageDataset(**init_pars_train)
-        valid_dataset = ImageDataset(**init_pars_valid)
+        train_dataset = cls(**init_pars_train)
+        valid_dataset = cls(**init_pars_valid)
 
         return train_dataset, valid_dataset
 
-    def split_train_val_paths(self, valid_set=0.2):
+    @classmethod
+    def split_train_val_paths(cls, img_file_paths, valid_set=0.2):
         '''Generates image names to be used for spliting the dataset.
 
         Parameters
@@ -206,7 +208,6 @@ class ImageDataset(torch_dataset.Dataset):
             Images used for validation
         '''
 
-        img_file_paths = self.img_file_paths
         num_images = len(img_file_paths)
 
         img_file_paths_train = []

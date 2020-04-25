@@ -3,3 +3,4 @@ __pycache__/
 drive/data/*/
 *.tar
 cortex/
+.idea/
