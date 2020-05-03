@@ -15,42 +15,170 @@ import cv2
 from PIL import Image
 from functools import partial
 
-def transf_normalize(img, label=None, weight=None):
+class TransfNormalize:
 
-    img_type = data_type(img, label, weight)
-    if img_type=='numpy':
-        img =  img.astype(float)/255.
-    elif img_type=='pil':
-        if len(img_pil.getbands())>1:
+    def __init__(self, transf_img=True, transf_label=False, transf_weight=False):
+        '''For imgaug normalization, an image and either a label or weight need to be passed.'''
+
+        self.transf_img = transf_img
+        self.transf_label = transf_label
+        self.transf_weight = transf_weight
+
+    def __call__(self, img=None, label=None, weight=None):
+
+        np_conv_func = partial(np.array, dtype=float, copy=False)
+
+        img_type = data_type(img, label, weight)
+        if img_type=='numpy':
+            if self.transf_img:
+                img =  np_conv_func(img)/255.
+            if self.transf_label:
+                label = label//255
+            if self.transf_weight:
+                weight = weight/255.
+        elif img_type=='pil':
+            if self.transf_img:
+                if self.validate_pil(img):
+                    img = numpy_to_pil(np_conv_func(pil_to_numpy(img))/255.)
+            if self.transf_label:
+                if self.validate_pil(label):
+                    label = numpy_to_pil(pil_to_numpy(label)//255)
+            if self.transf_weight:
+                if self.validate_pil(weight):
+                    weight = numpy_to_pil(pil_to_numpy(weight)/255.)
+        elif img_type=='imgaug':
+            if self.transf_img:
+                img =  np_conv_func(img)/255.
+            if self.transf_label:
+                label = ia.SegmentationMapsOnImage(label.get_arr()//255)
+            if self.transf_weight:
+                weight = ia.HeatmapsOnImage(weight.get_arr()/255.)
+        elif img_type=='tensor':
+            if self.transf_img:
+                img =  img.float().div(255.)
+            if self.transf_label:
+                label = label.div(255)
+            if self.transf_weight:
+                weight = weight.div(255.)
+
+        ret = []
+        if img is not None: ret.append(img)
+        if label is not None: ret.append(label)
+        if weight is not None: ret.append(weight)
+
+        if len(ret)==1:
+            return ret[0]
+        else:
+            return ret
+
+    @staticmethod
+    def validate_pil(img):
+        if len(img.getbands())>1:
             raise ValueError('Cannot convert color PIL image to type float')
-        img = numpy_to_pil(pil_to_numpy(img).astype(float)/255.)
-    elif img_type=='imgaug':
-        img = img.astype(float)/255.
-    elif img_type=='tensor':
-        img = img.float().div(255)
+        return True
 
-    ret = [img]
-    if label is not None: ret.append(label)
-    if weight is not None: ret.append(weight)
+class TransfUnormalize:
 
-    if len(ret)==1:
-        return ret[0]
+    def __init__(self, transf_img=True, transf_label=False, transf_weight=False):
+        '''For imgaug normalization, an image and either a label or weight need to be passed.'''
+
+        self.transf_img = transf_img
+        self.transf_label = transf_label
+        self.transf_weight = transf_weight
+
+    def __call__(self, img=None, label=None, weight=None):
+
+        np_conv_func = partial(np.array, dtype=np.uint8, copy=False)
+
+        img_type = data_type(img, label, weight)
+        if img_type=='numpy':
+            if self.transf_img:
+                img =  np_conv_func(255*img)
+            if self.transf_label:
+                label = 255*label
+            if self.transf_weight:
+                weight = 255*weight
+        elif img_type=='pil':
+            if self.transf_img:
+                img = numpy_to_pil(np_conv_func(255*pil_to_numpy(img)))
+            if self.transf_label:
+                label = numpy_to_pil(255*pil_to_numpy(label))
+            if self.transf_weight:
+                weight = numpy_to_pil(255*pil_to_numpy(weight))
+        elif img_type=='imgaug':
+            if self.transf_img:
+                img =  np_conv_func(255*img)
+            if self.transf_label:
+                label = ia.SegmentationMapsOnImage(255*label.get_arr())
+            if self.transf_weight:
+                weight = ia.HeatmapsOnImage(255*weight.get_arr())
+        elif img_type=='tensor':
+            if self.transf_img:
+                img =  img.mul(255).byte()
+            if self.transf_label:
+                label = label.mul(255)
+            if self.transf_weight:
+                weight = weight.mul(255)
+
+        ret = []
+        if img is not None: ret.append(img)
+        if label is not None: ret.append(label)
+        if weight is not None: ret.append(weight)
+
+        if len(ret)==1:
+            return ret[0]
+        else:
+            return ret
+
+class TransfWhitten:
+
+    def __init__(self, mean, std):
+
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, img, label=None, weight=None):
+
+        img_norm = (img - self.mean.view(-1, 1, 1))/self.std.view(-1, 1, 1)
+
+        ret = [img_norm]
+        if label is not None: ret.append(label)
+        if weight is not None: ret.append(weight)
+
+        if len(ret)==1:
+            return ret[0]
+        else:
+            return ret
+
+class TransfUnwhitten:
+
+    def __init__(self, mean, std):
+
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, img, label=None, weight=None):
+
+        img_norm = img*self.std.view(-1, 1, 1) + self.mean.view(-1, 1, 1)
+
+        ret = [img_norm]
+        if label is not None: ret.append(label)
+        if weight is not None: ret.append(weight)
+
+        if len(ret)==1:
+            return ret[0]
+        else:
+            return ret
+
+def transf_gray_to_color(img, label=None, weight=None):
+    '''Assumes tensors.'''
+
+    if img.shape[-3]==3:
+        img_res = img
     else:
-        return ret
+        img_res = img.expand(3, -1, -1)
 
-def transf_unormalize(img, label=None, weight=None):
-
-    img_type = data_type(img, label, weight)
-    if img_type=='numpy':
-        img =  (img*255).astype(np.uint8)
-    elif img_type=='pil':
-        img = numpy_to_pil((pil_to_numpy(img)*255).astype(np.uint8))
-    elif img_type=='imgaug':
-        img = (img*255).astype(np.uint8)
-    elif img_type=='tensor':
-        img = img.mul(255).byte()
-
-    ret = [img]
+    ret = [img_res]
     if label is not None: ret.append(label)
     if weight is not None: ret.append(weight)
 
@@ -155,9 +283,13 @@ class Transform:
         return None, None, None
 
 
-#### Conversion between library formats ####
-# There is probably a better way to do these conversions!
-# TODO: check dimensions and datatypes of inputs
+
+''' Conversion between library formats
+By default, the transformations do not change pixel intensities and the datatypes are conserved.
+Transformations from and to tensor may change the number of channels.
+There is probably a better way to do these conversions!
+TODO: check dimensions and datatypes of inputs
+'''
 
 def numpy_to_tensor(img, normalize=False, is_3d=False):
     '''Transposes color channel. Adds one dimension to the beginning if there is no color channel.'''
@@ -341,8 +473,14 @@ def apply_type_transf(transf, img, label=None, weight=None, imgaug=False, is_3d=
     else:
         return ret_vals
 
-def data_type(img, label=None, weight=None):
+def data_type(img=None, label=None, weight=None):
     '''Infer input datatype. Can be either ndarray, PIL.Image, torhc.Tensor or imgaug'''
+
+    if img is None:
+        if label is None:
+            img = weight
+        else:
+            img = label
 
     img_type = ''
     if isinstance(img, np.ndarray):
@@ -406,5 +544,30 @@ def _test_transforms(img, label=None, weight=None):
         if not np.allclose(input, output): raise AssertionError('Images are not equal')
 
     return ret
+
+def _test_normalization_transf(img=None, label=None, weight=None):
+
+    transfs = [
+        transf_to_numpy,
+        transf_to_pil,
+        transf_to_tensor
+    ]
+    tn = TransfNormalize(True)
+    tu = TransfUnormalize(True)
+    for transf in transfs:
+        img, label, weight = transf(img, label, weight)
+        img_n, label_n, weight_n = tu(*tn(img, label, weight))
+
+    tn = TransfNormalize(True, True, True)
+    tu = TransfUnormalize(True, True, True)
+    for transf in transfs:
+        img, label, weight = transf(img, label, weight)
+        img_n, label_n, weight_n = tu(*tn(img, label, weight))
+
+    tn = TransfNormalize(True, False)
+    tu = TransfUnormalize(True, False)
+    for transf in transfs:
+        img, label, weight = transf(img, label, weight)
+        img_n, label_n, weight_n = tu(*tn(img, label, weight))
 
 ###############################################
