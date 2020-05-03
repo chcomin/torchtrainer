@@ -4,3 +4,5 @@ drive/data/*/
 *.tar
 cortex/
 .idea/
+coco/river/*/
+runs/
