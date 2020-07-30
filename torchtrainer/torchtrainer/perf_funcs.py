@@ -161,7 +161,7 @@ def weighted_cross_entropy(input, target, weight=None, epoch=None):
 
     return loss
 
-def label_weighted_loss(input, target, loss_func):
+def label_weighted_loss(input, target, *args, loss_func=F.cross_entropy):
     '''Return loss weighted by inverse label frequency. loss_func must have a weight argument.'''
 
     num_pix_in_class = torch.bincount(target.view(-1)).float()
@@ -169,3 +169,17 @@ def label_weighted_loss(input, target, loss_func):
     weight = weight/weight.sum()
     return loss_func(input, target, weight=weight)
 
+
+class SmoothenValue:
+    '''Create weighted moving average.'''
+    def __init__(self, beta):
+
+        self.beta = beta
+        self.n = 0
+        self.mov_avg = 0
+
+    def add_value(self, val):
+
+        self.n += 1
+        self.mov_avg = self.beta * self.mov_avg + (1 - self.beta) * val
+        self.smooth = self.mov_avg / (1 - self.beta ** self.n)
