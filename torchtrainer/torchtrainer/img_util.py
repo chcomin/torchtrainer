@@ -10,6 +10,7 @@ Utilities for working with PIL, tensor, numpy and imgaug images
 from PIL import Image
 import torch
 from IPython.display import display
+import matplotlib.pyplot as plt
 
 def pil_img_info(img, print_repr=False):
     '''Returns the following information about a PIL image:
@@ -147,3 +148,76 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
         img = img.point(lut)
 
     return img
+
+class PerfVisualizer:
+    '''Class for visualizing classification results in increasing order of the values returned by `perf_func`'''
+
+    def __init__(self, dataset, model, perf_func, model_pred_func=None, device=None):
+
+        if model_pred_func is None:
+            model_pred_func = self.pred
+
+        if device is None:
+            if torch.cuda.is_available():
+                device = torch.device('cuda')
+            else:
+                device = torch.device('cpu')
+
+        self.dataset = dataset
+        self.model = model
+        self.perf_func = perf_func
+        self.device = device
+        self.model_pred_func = model_pred_func
+
+        self.performance_per_image()
+        self.plot_samples()
+
+
+    def performance_per_image(self, label_thresh=10):
+
+        self.model.eval()
+        self.model.to(self.device)
+
+        num_samples = len(self.dataset)
+        perf_dict = {}
+        #print("allocated, allocated_bytes, segment, reserved_bytes, active, active_bytes")
+        for idx, (img, label) in enumerate(self.dataset):
+            if label.sum()>label_thresh:
+                predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
+                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc}
+
+            if idx%100==0:
+                print(f'Evaluating images...{100*idx/num_samples:1.0f}%', end='\r')
+                '''memstats = torch.cuda.memory_stats(device)
+                print(memstats["allocation.all.peak"],
+                memstats["allocated_bytes.all.peak"],
+                memstats["segment.all.peak"],
+                memstats["reserved_bytes.all.peak"],
+                memstats["active.all.peak"],
+                memstats["active_bytes.all.peak"])'''
+
+        print(''*30, end='\r')
+
+        perf_list = sorted(list(perf_dict.items()), key=lambda x:x[1]['perf'])
+        self.perf_list = perf_list
+
+        return perf_list
+
+    def pred(self, xb, yb):
+
+        with torch.no_grad():
+            xb = xb.to(self.device, torch.float32)
+            predb = self.model(xb)
+
+            predb = predb.cpu()
+            predb_acc = self.perf_func(predb, yb)
+
+        return predb_acc
+
+    def plot_samples(self):
+
+        perf_vals = [elem[1]['perf'] for elem in self.perf_list]
+
+        plt.figure(figsize=[15,15])
+        plt.plot(perf_vals)
+        plt.ylim(0, 1)

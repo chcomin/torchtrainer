@@ -37,7 +37,7 @@ def accuracy(input, target, ignore_index=None):
 
     return iou
 
-def get_prfa(input, target, mea='acc', mask_value=None, ignore_index=None):
+def get_prfa(input, target, mea='iou', mask_value=None, ignore_index=None):
     '''Calculate some accuracy measuremets for segmentation results. Assumes background has value 0 and
     the segmentation has value 1.
 

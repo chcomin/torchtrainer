@@ -187,6 +187,20 @@ def transf_gray_to_color(img, label=None, weight=None):
     else:
         return ret
 
+def transf_color_to_gray(img, label=None, weight=None):
+    '''Assumes tensors.'''
+
+    img_res = 0.299*img[0] + 0.587*img[1] + 0.114*img[2]
+
+    ret = [img_res]
+    if label is not None: ret.append(label)
+    if weight is not None: ret.append(weight)
+
+    if len(ret)==1:
+        return ret[0]
+    else:
+        return ret
+
 def translate_imagaug_seq(imgaug_seq):
     '''Closure for translating arguments 'image', 'segmentation_maps' and 'heatmaps' of
     imgaug functions to 'img', 'label' and 'weight'

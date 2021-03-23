@@ -53,13 +53,16 @@ class Learner:
     checkpoint_file : string
         File to save the model when the accuracy have improved. Also used as default file for saving
         the model when function save_state is called
+    scheduler_step_epoch : bool
+        If True, the scheduler will call step() after every epoch. If False, step() will be called after
+        every batch.
     device : torch.device
         Device used for training
     """
 
     def __init__(self, model, loss_func, optm, train_dl, valid_dl, scheduler=None,
                  acc_funcs=None, main_acc_func='loss', checkpoint_file='./learner.tar',
-                 callbacks=None, device=None):
+                 scheduler_step_epoch=True, callbacks=None, device=None):
 
         if acc_funcs is None:
             self.acc_funcs = {}
@@ -84,6 +87,7 @@ class Learner:
         self.device = device
         self.main_acc_func = main_acc_func
         self.checkpoint_file = checkpoint_file
+        self.scheduler_step_epoch = scheduler_step_epoch
 
         self.train_loss_history = []
         self.valid_loss_history = []
@@ -130,7 +134,7 @@ class Learner:
         self._train_one_epoch()
         self._validate_one_epoch()
 
-        if self.scheduler is not None:
+        if (self.scheduler is not None) and self.scheduler_step_epoch:
             self.lr_history.append(self.scheduler.get_lr())
             self.scheduler.step()
 
@@ -146,6 +150,10 @@ class Learner:
             self.optm.step()
             self.optm.zero_grad()
 
+            if (self.scheduler is not None) and (not self.scheduler_step_epoch):
+                self.lr_history.append(self.scheduler.get_lr())
+                self.scheduler.step()
+
             with torch.no_grad():
                 train_loss += loss.item()
 
@@ -157,19 +165,19 @@ class Learner:
 
         self.model.eval()
         valid_loss = 0.
-        valid_acc = [0.]*len(self.acc_funcs)
+        valid_acc = dict(zip(self.acc_funcs.keys(), [0.]*len(self.acc_funcs)))
         with torch.no_grad():
             for item_collection in self.valid_dl:
                 loss, predb, yb = self._apply_to_batch(*item_collection, ret_data=True)
 
                 valid_loss += loss.item()
                 accs = self._apply_acc_funcs(predb, yb)
-                for idx, v in enumerate(accs):
-                    valid_acc[idx] += v
+                for key in accs:
+                    valid_acc[key] += accs[key]
 
             self.valid_loss_history.append(valid_loss/len(self.valid_dl))
             for idx, (func_name, acc_func) in enumerate(self.acc_funcs.items()):
-                self.acc_funcs_history[func_name].append(valid_acc[idx]/len(self.valid_dl))
+                self.acc_funcs_history[func_name].append(valid_acc[func_name]/len(self.valid_dl))
 
             for cb in self.callbacks:
                 cb.on_epoch_end(item_collection[0], item_collection[1], predb, self.epoch)
@@ -210,7 +218,7 @@ class Learner:
             wb_cropped = self.center_crop_tensor(wb.squeeze(1), (wb.shape[0],)+self.crop_shape)
         predb = self.model(xb)
         yb_cropped = self.center_crop_tensor(yb.squeeze(1), (yb.shape[0],)+self.crop_shape)
-        loss = self.loss_func(predb, yb_cropped, wb_cropped, self.epoch)
+        loss = self.loss_func(predb, yb_cropped, wb_cropped)
 
         if ret_data:
             return loss, predb, yb_cropped
@@ -250,9 +258,9 @@ class Learner:
             List containing the accuracy calculated by each function
         '''
 
-        valid_acc = []
+        valid_acc = {}
         for idx, (func_name, acc_func) in enumerate(self.acc_funcs.items()):
-            valid_acc.append(acc_func(predb, yb))
+            valid_acc[func_name] = acc_func(predb, yb)
         return valid_acc
 
     def _check_if_better_score(self):
@@ -420,7 +428,7 @@ class Learner:
         with torch.no_grad():
             for xb,yb in test_dl:
                 _, pred_acc = self.pred(xb, yb)
-                for idx, v in enumerate(pred_acc):
+                for idx, (k,v) in enumerate(pred_acc.items()):
                     test_acc[idx] += v
 
         return [v/len(test_dl) for v in test_acc]

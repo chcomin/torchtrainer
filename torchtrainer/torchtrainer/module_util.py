@@ -89,11 +89,15 @@ class Hooks:
             hook_func = self._generate_hook(func, self.storage[layer_name])
             self.hooks.append(layer.register_forward_hook(hook_func))
 
-    def _register_backward_hooks(self):
-        pass
+    def _register_backward_hooks(self, func):
+        '''Register one hook for each layer.'''
+
+        for layer_name, layer in self.layers_dict.items():
+            hook_func = self._generate_hook(func, self.storage[layer_name])
+            self.hooks.append(layer.register_backward_hook(hook_func))
 
     def _generate_hook(self, func, storage):
-        '''Generate function to be used in module.register_forward_hook, fixing
+        '''Generate function to be used in module.register_forward_hook and module.register_backward_hook, fixing
         as a first argument to the function an empty dictionary.'''
 
         return partial(func, storage)

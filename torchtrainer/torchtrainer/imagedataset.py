@@ -39,8 +39,8 @@ class ImageDataset(torch_dataset.Dataset):
         labels filenames. Receives an image filename and returns the filename of an image containing
         the respective label
     filename_filter : list or function
-        If list, contains names of the image files that should be kept, other images are ignored
-        If function, has signature filename_filter(img_filename), receives an image filename and returns
+        If a list, contains names of the image files that should be kept, other images are ignored
+        If a function, has signature filename_filter(img_filename), receives an image filename and returns
         True if the image should be kept. The image is discarded otherwise
     img_opener : function
         Function with signature img_opener(img_path) for opening the images. Receives an image path
@@ -112,10 +112,14 @@ class ImageDataset(torch_dataset.Dataset):
             ret_transf = self.apply_transforms(self.transforms, img, label)
 
         # Hack for fastai
-
+        #for r in ret_transf:
+        #    r.size = lambda dim: r.shape[1:]
         for r in ret_transf:
-            r.size = r.shape[1:]
-        ret_transf[1] = ret_transf[1].long().squeeze()
+            if isinstance(r, torch.Tensor):
+                r.size = TensorShape(r.shape[1:])
+
+        if isinstance(r, torch.Tensor):
+            ret_transf[1] = ret_transf[1].long().squeeze()
 
         return ret_transf
 
@@ -309,6 +313,47 @@ class ImageDataset(torch_dataset.Dataset):
         for transform in transforms:
                 vals = transform(*vals)
         return vals
+
+    def get_img(self, idx, transforms=None):
+        '''Same behavior as self.__getitem__() but does not apply transformation functions. Custom
+        transformation functions can be passed as an optional parameter.'''
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label_file_path = self.label_path_from_image_path(img_file_path)
+        label = self.label_opener(label_file_path)
+
+        if self.weight_func is not None:
+            weight = self.weight_func(img, label, img_file_path)
+            ret_transf = self.apply_transforms(transforms, img, label, weight)
+        else:
+            ret_transf = self.apply_transforms(transforms, img, label)
+
+        # Hack for fastai
+        #for r in ret_transf:
+        #    r.size = lambda dim: r.shape[1:]
+        for r in ret_transf:
+            if isinstance(r, torch.Tensor):
+                r.size = TensorShape(r.shape[1:])
+
+        if isinstance(r, torch.Tensor):
+            ret_transf[1] = ret_transf[1].long().squeeze()
+
+        return ret_transf
+
+class TensorShape(tuple):
+    '''Class for adding a `size` atribute on tensors that works on both PyTorch, Jupyter and Fastai.'''
+
+    def __new__ (cls, args):
+        return super(TensorShape, cls).__new__(cls, tuple(args))
+
+    def __call__(self, dim=None):
+
+        if dim is None:
+            return self
+        else:
+            return self[dim]
 
 class ImageItem:
 
