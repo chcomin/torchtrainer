@@ -4,6 +4,8 @@
 #################################################
 # Original notebook: ..\..\layers.ipynb
 from collections.abc import Iterable
+import torch
+import torch.nn as nn
 
 def ntuple(x, n):
     '''Verify if x is iterable. If not, create tuple containing x repeated n times'''

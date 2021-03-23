@@ -39,13 +39,16 @@ def accuracy(input, target, ignore_index=None):
 
 def get_prfa(input, target, mea='iou', mask_value=None, ignore_index=None):
     '''Calculate some accuracy measuremets for segmentation results. Assumes background has value 0 and
-    the segmentation has value 1.
+    the segmentation has value 1. If more than one image in batch, returns a single value representing the
+    average performance for all images in the batch.
 
     Possible measurements are:
         iou : intersection over union
         f1 : f1 score
         prec : precision
         rec : recall
+
+    TODO: Add option to return one value per image in the batch.
 
     Parameters
     ----------

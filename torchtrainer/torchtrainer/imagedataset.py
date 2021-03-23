@@ -127,6 +127,10 @@ class ImageDataset(torch_dataset.Dataset):
 
         return len(self.img_file_paths)
 
+    def copy(self):
+
+        return self.subset(lambda x:True)
+
     def subset(self, filename_filter):
 
         img_dir = copy.copy(self.img_dir)
@@ -317,6 +321,9 @@ class ImageDataset(torch_dataset.Dataset):
     def get_img(self, idx, transforms=None):
         '''Same behavior as self.__getitem__() but does not apply transformation functions. Custom
         transformation functions can be passed as an optional parameter.'''
+
+        if transforms is None:
+            transforms = []
 
         img_file_path = self.img_file_paths[idx]
 
