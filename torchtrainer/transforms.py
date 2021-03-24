@@ -529,7 +529,7 @@ def apply_type_transf(transf, img=None, label=None, weight=None, imgaug=False, i
         transf = partial(transf, is_3d=is_3d)
     if imgaug:
         # This will only work for transformations to imgaug
-        transf = partial(transf, img_shape=TransftoNumpy(is_3d)(img).shape)
+        transf = partial(transf, img_shape=TransfToNumpy(is_3d)(img).shape)
 
     ret_vals = []
     if img is not None:

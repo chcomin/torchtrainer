@@ -29,8 +29,8 @@ class ImageDataset(torch_dataset.Dataset):
         Directory containing the images to be read
     label_dir : string or pathlib path
         Directory containing the labels (segmentations) to be read
-    name_2_label_map : function
-        Function with signature name_2_label_map(img_filename) that translates image filenames into
+    name_to_label_map : function
+        Function with signature name_to_label_map(img_filename) that translates image filenames into
         labels filenames. Receives an image filename and returns the filename of an image containing
         the respective label
     filename_filter : list or function
@@ -51,32 +51,25 @@ class ImageDataset(torch_dataset.Dataset):
     weight_func : function
         Function for generating weights associated to each image. Those can be used for defining masks
         or, for instance, weighting the loss function. Must have signature
-        weight_func(pil_img, pil_label, img_path=None) and return a PIL.Image with F (float32) type
+        weight_func(pil_img, pil_label, img_path) and return a PIL.Image with F (float32) type
     """
 
-    def __init__(self, img_dir, label_dir, name_2_label_map, filename_filter=None, img_opener=None,
-                 label_opener=None, transforms=None, weight_func=None):
+    def __init__(self, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
+                 transforms=None):
 
         if isinstance(img_dir, str):
             img_dir = Path(img_dir)
-        if isinstance(label_dir, str):
-            label_dir = Path(label_dir)
         if isinstance(filename_filter, list):
             filename_filter = set(filename_filter)
         if transforms is None:
             transforms = []
         if img_opener is None:
             img_opener = Image.open
-        if label_opener is None:
-            label_opener = Image.open
 
         self.img_dir = img_dir
-        self.label_dir = label_dir
-        self.name_2_label_map = name_2_label_map
+        self.name_to_label_map = name_to_label_map
         self.img_opener = img_opener
-        self.label_opener = label_opener
         self.transforms = transforms
-        self.weight_func = weight_func
 
         img_file_paths = []
         for img_file_path in img_dir.iterdir():
@@ -91,32 +84,19 @@ class ImageDataset(torch_dataset.Dataset):
         self.img_file_paths = img_file_paths
 
     def __getitem__(self, idx):
-        '''Returns one item from the dataset. Will return an image and label if weight_func was
-        not defined during class instantiation or an aditional weight image otherwise.'''
 
         img_file_path = self.img_file_paths[idx]
 
         img = self.img_opener(img_file_path)
-        label_file_path = self.label_path_from_image_path(img_file_path)
-        label = self.label_opener(label_file_path)
+        label = self.name_to_label_map(img_file_path.name)
 
-        if self.weight_func is not None:
-            weight = self.weight_func(img, label, img_file_path)
-            ret_transf = self.apply_transforms(self.transforms, img, label, weight)
-        else:
-            ret_transf = self.apply_transforms(self.transforms, img, label)
+        ret_transf = self.apply_transforms(self.transforms, img)
 
         # Hack for fastai
-        #for r in ret_transf:
-        #    r.size = lambda dim: r.shape[1:]
-        for r in ret_transf:
-            if isinstance(r, torch.Tensor):
-                r.size = TensorShape(r.shape[1:])
+        if isinstance(ret_transf, torch.Tensor):
+            ret_transf.size = TensorShape(ret_transf.shape[1:])
 
-        if isinstance(r, torch.Tensor):
-            ret_transf[1] = ret_transf[1].long().squeeze()
-
-        return ret_transf
+        return ret_transf, label
 
     def __len__(self):
 
@@ -128,21 +108,12 @@ class ImageDataset(torch_dataset.Dataset):
 
     def subset(self, filename_filter):
 
-        img_dir = copy.copy(self.img_dir)
-        label_dir = copy.copy(self.label_dir)
-        name_2_label_map = self.name_2_label_map
+        img_dir = self.img_dir
+        name_to_label_map = self.name_to_label_map
         img_opener = self.img_opener
-        label_opener = self.label_opener
         transforms = copy.copy(self.transforms)
-        weight_func = self.weight_func
-        return self.__class__(img_dir, label_dir, name_2_label_map, filename_filter=filename_filter, img_opener=img_opener,
-                              label_opener=label_opener, transforms=transforms, weight_func=weight_func)
-
-    def label_path_from_image_path(self, img_file_path):
-        '''Translates image path to label path.'''
-
-        img_filename = img_file_path.name
-        return self.label_dir/self.name_2_label_map(img_filename)
+        return self.__class__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
+                              transforms=transforms)
 
     def check_dataset(self):
         '''Check if all images in the dataset can be read, and if the transformations
@@ -163,6 +134,8 @@ class ImageDataset(torch_dataset.Dataset):
             for idx, ret_val in enumerate(ret_vals):
                 # Check if data has the same shape
                 if len(shapes)<(idx+1):
+                    if not isinstance(ret_val, torch.Tensor):
+                        ret_val = torch.tensor(ret_val)
                     shapes.append(ret_val.shape)
                 elif ret_val.shape!=shapes[idx]:
                     raise Exception(f"Data has different shape at index {img_idx}")
@@ -276,6 +249,8 @@ class ImageDataset(torch_dataset.Dataset):
 
         img_file_paths = self.img_file_paths
         ret_vals = self.__getitem__(0)           # Open first image to get shape
+        if not isinstance(ret_vals[1], torch.Tensor):   # In case label is not a tensor
+            ret_vals[1] = torch.tensor(ret_vals[1])
 
         num_tensors = len(img_file_paths)
         tensors = [torch.zeros((num_tensors, *val.shape), dtype=val.dtype) for val in ret_vals]
@@ -286,6 +261,151 @@ class ImageDataset(torch_dataset.Dataset):
                 tensors[idx][file_idx] = ret_val
 
         return tensors
+
+    def apply_transforms(self, transforms, img):
+        '''Apply transformations stored in transforms
+
+        Parameters
+        ----------
+        transforms : list of functions
+            List of functions to be applied for image augmentation. Each function should have the signature
+            transform(img) and return img
+        img : Image-like
+            Images to be processed
+
+        Returns
+        -------
+        vals : Image-like
+            Resulting images. Either (img, label) if weight is None or (img, label, weight) otherwise
+        '''
+        for transform in transforms:
+                img = transform(img)
+        return img
+
+    def get_item(self, idx, transforms=None):
+        '''Same behavior as self.__getitem__() but does not apply transformation functions. Custom
+        transformation functions can be passed as an optional parameter.'''
+
+        if transforms is None:
+            transforms = []
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label = self.name_to_label_map(img_file_path.name)
+
+        ret_transf = self.apply_transforms(transforms, img)
+
+        # Hack for fastai
+        if isinstance(ret_transf, torch.Tensor):
+            ret_transf.size = TensorShape(ret_transf.shape[1:])
+
+        return ret_transf, label
+
+class ImageSegmentationDataset(ImageDataset):
+    """Dataset storage class.
+
+    Receives an input image and label directory and stores respective images. Images can be
+    retrieved as follows:
+
+    image_ds = ImageDataset(...)
+    img, label = image_ds[0]
+
+    or, in case weight_func is not None:
+
+    img, label, weight = image_ds[0]
+
+    Parameters
+    ----------
+    img_dir : string or pathlib path
+        Directory containing the images to be read
+    label_dir : string or pathlib path
+        Directory containing the labels (segmentations) to be read
+    name_to_label_map : function
+        Function with signature name_to_label_map(img_filename) that translates image filenames into
+        labels filenames. Receives an image filename and returns the filename of an image containing
+        the respective label
+    filename_filter : list or function
+        If a list, contains names of the image files that should be kept, other images are ignored
+        If a function, has signature filename_filter(img_filename), receives an image filename and returns
+        True if the image should be kept. The image is discarded otherwise
+    img_opener : function
+        Function with signature img_opener(img_path) for opening the images. Receives an image path
+        and returns a PIL.Image object. Images should be have uint8 type.
+    label_opener: function
+        Function with signature label_opener(label_path) for opening the labels. Receives an label path
+        and returns a PIL.Image object. The image should contain class indices and have uint8 type
+    transforms : list of functions
+        List of functions to be applied for image augmentation. Each function should have the signature
+        transform(img, label, weight=None) and return a tuple (img, label) in case `weight_func` is None
+        or (img, label, weight) otherwise. The arguments of the first transform should be PIL.Image objects,
+        while the return values of the last transform should be float32 torch.Tensor objects.
+    weight_func : function
+        Function for generating weights associated to each image. Those can be used for defining masks
+        or, for instance, weighting the loss function. Must have signature
+        weight_func(pil_img, pil_label, img_path) and return a PIL.Image with F (float32) type
+    """
+
+    def __init__(self, img_dir, label_dir, name_to_label_map, filename_filter=None, img_opener=None,
+                 label_opener=None, transforms=None, weight_func=None):
+
+        super().__init__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
+                 transforms=transforms)
+
+        if isinstance(label_dir, str):
+            label_dir = Path(label_dir)
+        if label_opener is None:
+            label_opener = Image.open
+
+        self.label_dir = label_dir
+        self.label_opener = label_opener
+        self.weight_func = weight_func
+
+    def __getitem__(self, idx):
+        '''Returns one item from the dataset. Will return an image and label if weight_func was
+        not defined during class instantiation or an aditional weight image otherwise.'''
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label_file_path = self.label_path_from_image_path(img_file_path)
+        label = self.label_opener(label_file_path)
+
+        if self.weight_func is not None:
+            weight = self.weight_func(img, label, img_file_path)
+            ret_transf = self.apply_transforms(self.transforms, img, label, weight)
+        else:
+            ret_transf = self.apply_transforms(self.transforms, img, label)
+
+        # Hack for fastai
+        #for r in ret_transf:
+        #    r.size = lambda dim: r.shape[1:]
+        for r in ret_transf:
+            if isinstance(r, torch.Tensor):
+                r.size = TensorShape(r.shape[1:])
+
+        if isinstance(ret_transf[1], torch.Tensor):
+            ret_transf[1] = ret_transf[1].long().squeeze()  # Label image
+
+        return ret_transf
+
+    def subset(self, filename_filter):
+
+        img_dir = self.img_dir
+        label_dir = self.label_dir
+        name_to_label_map = self.name_to_label_map
+        img_opener = self.img_opener
+        label_opener = self.label_opener
+        transforms = copy.copy(self.transforms)
+        weight_func = self.weight_func
+        return self.__class__(img_dir, label_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
+                              label_opener=label_opener, transforms=transforms, weight_func=weight_func)
+
+    def label_path_from_image_path(self, img_file_path):
+        '''Translates image path to label path.'''
+
+        img_filename = img_file_path.name
+        return self.label_dir/self.name_to_label_map(img_filename)
 
     def apply_transforms(self, transforms, img, label, weight=None):
         '''Apply transformations stored in transforms
@@ -358,6 +478,7 @@ class TensorShape(tuple):
             return self[dim]
 
 class ImageItem:
+    """Initial implementation of an image class"""
 
     def __init__(self, img, label=None, weight=None):
 
@@ -457,7 +578,7 @@ class ImagePatchDataset(ImageDataset):
 
         img_dir = copy.copy(self.img_dir)
         label_dir = copy.copy(self.label_dir)
-        name_2_label_map = self.name_2_label_map
+        name_to_label_map = self.name_to_label_map
         img_opener = self.img_opener
         label_opener = self.label_opener
         transforms = copy.copy(self.transforms)
@@ -465,7 +586,7 @@ class ImagePatchDataset(ImageDataset):
         patch_size = copy.copy(self.patch_size)
         stride = copy.copy(self.stride)
         patch_transforms = copy.copy(self.patch_transforms)
-        return self.__class__(patch_size, img_dir, label_dir, name_2_label_map, stride=stride,
+        return self.__class__(patch_size, img_dir, label_dir, name_to_label_map, stride=stride,
                               filename_filter=filename_filter, img_opener=img_opener, label_opener=label_opener,
                               transforms=transforms, patch_transforms=patch_transforms, weight_func=weight_func)
 
