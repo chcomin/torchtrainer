@@ -214,5 +214,5 @@ class PerfVisualizer:
         perf_vals = [elem[1]['perf'] for elem in self.perf_list]
 
         plt.figure(figsize=[15,15])
-        plt.plot(perf_vals)
+        plt.plot(perf_vals, '-o')
         plt.ylim(0, 1)
