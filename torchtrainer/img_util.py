@@ -181,7 +181,7 @@ class PerfVisualizer:
         perf_dict = {}
         #print("allocated, allocated_bytes, segment, reserved_bytes, active, active_bytes")
         for idx, (img, label) in enumerate(self.dataset):
-            if label.sum()>label_thresh:
+            if label.ndim>1 and label.sum()>label_thresh:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
                 perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc.item()}
 

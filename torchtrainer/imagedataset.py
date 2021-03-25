@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 import random
 from torch.utils.data import dataset as torch_dataset
+from torch.utils.data import dataloader as torch_dataloader
 import torch
 import bisect
 import copy
@@ -99,6 +100,8 @@ class ImageDataset(torch_dataset.Dataset):
         # Hack for fastai
         if isinstance(ret_transf, torch.Tensor):
             ret_transf.size = TensorShape(ret_transf.shape[1:])
+        if not isinstance(label, torch.Tensor):
+            label = torch.tensor(label)
 
         return ret_transf, label
 
@@ -123,6 +126,10 @@ class ImageDataset(torch_dataset.Dataset):
 
         self.transforms = transforms
 
+    def dataloader(self, batch_size, shuffle=True, **kwargs):
+
+        return torch_dataloader.DataLoader(self, batch_size=batch_size, shuffle=True, **kwargs)
+
     def check_dataset(self):
         '''Check if all images in the dataset can be read, and if the transformations
         can be successfully applied. It is usefull to call this function right after
@@ -141,9 +148,11 @@ class ImageDataset(torch_dataset.Dataset):
 
             for idx, ret_val in enumerate(ret_vals):
                 # Check if data has the same shape
+                if not isinstance(ret_val, torch.Tensor):
+                    ret_val = torch.tensor(ret_val)
+                    if ret_val.ndim==0:
+                        ret_val = torch.tensor([ret_val]) 
                 if len(shapes)<(idx+1):
-                    if not isinstance(ret_val, torch.Tensor):
-                        ret_val = torch.tensor(ret_val)
                     shapes.append(ret_val.shape)
                 elif ret_val.shape!=shapes[idx]:
                     raise Exception(f"Data has different shape at index {img_idx}")

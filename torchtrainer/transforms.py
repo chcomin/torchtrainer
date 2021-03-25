@@ -451,7 +451,11 @@ def tensor_to_numpy(img, unormalize=False, is_3d=False):
 
 def pil_to_numpy(img):
 
-    return np.array(img, copy=False)
+    npimg = np.array(img, copy=True)
+    if not npimg.flags.writeable:
+        npimg.flags.writeable = True
+
+    return npimg
 
 def imgaug_to_numpy(img):
 
