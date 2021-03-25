@@ -32,7 +32,7 @@ def accuracy(input, target, ignore_index=None):
 
     return iou
 
-def get_prfa(input, target, mea='iou', mask_value=None, ignore_index=None):
+def get_prfa(input, target, meas='iou', reduce_batch=True, mask=None):
     '''Calculate some accuracy measuremets for segmentation results. Assumes background has value 0 and
     the segmentation has value 1. If more than one image in batch, returns a single value representing the
     average performance for all images in the batch.
@@ -51,63 +51,95 @@ def get_prfa(input, target, mea='iou', mask_value=None, ignore_index=None):
         Output class probabilities of the network. Must have shape (batch size, num classes, height, width)
     target : torch.Tensor
         Target tensor. Must have shape (batch size, height, width)
-    mea : string
-        Name of the desired measurement from the set {'iou', 'f1', 'prec', 'rec'}
-    mask_value : int
-        Not implemented!
-    ignore_index : int
-        Not implemented!
+    meas : str or list of str
+        Name of the desired measurements from the set {'iou', 'f1', 'prec', 'rec'}
+    reduce_batch : bool
+        If True, a single value is returned for the batch for each measurement. If False, returns one
+        value for each item in the batch for each measurement.
+    mask : int
+        Values where mask is 0 will be ignored.
 
     Returns
     -------
-    out_mea : float
-        The calculated accuracy
+    out_mea : torch.Tensor or dict
+        The calculated values. If `meas` contains a single measurement, the returned value is a tensor
+        with a single value if `reduce_batch` is True or a tensor array of size target.shape[0] if
+        `reduce_batch` is False. If `meas` is a list, the function returns a dictionary keyed by
+        the metrics names. The values for each item depend on `reduce_batch` as above.
     '''
+
+    input = input.detach()
+    if isinstance(meas, str):
+        meas = [meas]
 
     beta = torch.tensor(1.)
     target = target.squeeze(1)
 
     res_labels = torch.argmax(input, dim=1)
-    #res_labels = res_labels.view(-1)
-    #yb = yb.view(-1)
 
     # Assumes only values in res_labels are 0 and 1 (two classes)
     y_cases = 2*target + res_labels
-    tp = torch.sum(y_cases == 3).item()
-    fp = torch.sum(y_cases == 1).item()
-    tn = torch.sum(y_cases == 0).item()
-    fn = torch.sum(y_cases == 2).item()
+    if mask is not None:
+        y_cases[mask==0] = 4
 
-    try:
-        p = tp / (tp + fp)
-    except ZeroDivisionError:
-        p = torch.tensor(0.)
-    try:
-        r = tp / (tp + fn)
-    except ZeroDivisionError:
-        r = torch.tensor(0.)
-    try:
-        f = (1 + beta ** 2) * p * r / (((beta ** 2) * p) + r)
-    except ZeroDivisionError:
-        f = torch.tensor(0.)
-    try:
-        iou = tp / (tp + fp + fn)
-    except ZeroDivisionError:
-        iou = torch.tensor(0.)
+    axes = list(range(1, target.ndim))   # Exclude batch dimension in sum
+    tps = torch.sum(y_cases == 3, dim=axes)
+    fps = torch.sum(y_cases == 1, dim=axes)
+    tns = torch.sum(y_cases == 0, dim=axes)
+    fns = torch.sum(y_cases == 2, dim=axes)
 
-    if mea=='iou':
-        out_mea = iou
-    elif mea=='f1':
-        out_mea = f
-    elif mea=='prec':
-        out_mea = p
-    elif mea=='rec':
-        out_mea = r
+    if reduce_batch:
+        tps = tps.sum(dim=0, keepdim=True)
+        fps = fps.sum(dim=0, keepdim=True)
+        tns = tns.sum(dim=0, keepdim=True)
+        fns = fns.sum(dim=0, keepdim=True)
 
-    if not isinstance(out_mea, torch.Tensor):
-        out_mea = torch.tensor(out_mea)
+    bs = target.shape[0]
+    precisions = torch.zeros(bs)
+    recalls = torch.zeros(bs)
+    f1s = torch.zeros(bs)
+    ious = torch.zeros(bs)
+    for idx, (tp, fp, tn, fn) in enumerate(zip(tps, fps, tns, fns)):
+        if tp!=0 or fp!=0:
+            precision = tp / (tp + fp)
+        else:
+            precision = 0.
+        if tp!=0 or fn!=0:
+            recall = tp / (tp + fn)
+        else:
+            recall = 0.
+        if precision!=0 or recall!=0:
+            f1 = (1 + beta ** 2) * precision * recall / (((beta ** 2) * precision) + recall)
+        else:
+            f1 = 0.
+        if tp!=0 or fp!=0 or fn!=0:
+            iou = tp / (tp + fp + fn)
+        else:
+            iou = 0.
 
-    return out_mea
+        precisions[idx] = precision
+        recalls[idx] = recall
+        f1s[idx] = f1
+        ious[idx] = iou
+
+    out_meas = {}
+    if 'iou' in meas:
+        out_meas['iou'] = ious
+    if 'f1' in meas:
+        out_meas['f1'] = f1s
+    if 'prec' in meas:
+        out_meas['prec'] = precisions
+    if 'rec' in meas:
+        out_meas['rec'] = recalls
+
+    if reduce_batch:
+        for k, v in out_meas.items():
+            out_meas[k] = v[0]
+
+    if len(out_meas)==1:
+        out_meas = list(out_meas.values())[0]
+
+    return out_meas
 
 def build_acc_dict(get_prfa):
     '''Build dictionary containing accuracy functions from `get_prfa`
@@ -120,7 +152,7 @@ def build_acc_dict(get_prfa):
 
     acc_dict = {}
     for mea in ['iou', 'f1', 'prec', 'rec']:
-        acc_dict[mea] = partial(get_prfa, mea=mea)
+        acc_dict[mea] = partial(get_prfa, meas=mea)
     return acc_dict
 
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
