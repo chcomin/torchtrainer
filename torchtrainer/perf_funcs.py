@@ -38,12 +38,10 @@ def get_prfa(input, target, meas='iou', reduce_batch=True, mask=None):
     average performance for all images in the batch.
 
     Possible measurements are:
-        iou : intersection over union
-        f1 : f1 score
         prec : precision
         rec : recall
-
-    TODO: Add option to return one value per image in the batch.
+        f1 : f1 score
+        iou : intersection over union
 
     Parameters
     ----------
