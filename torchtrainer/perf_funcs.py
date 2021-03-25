@@ -167,6 +167,78 @@ def label_weighted_loss(input, target, *args, loss_func=F.cross_entropy):
     weight = weight/weight.sum()
     return loss_func(input, target, weight=weight)
 
+def apply_on_cropped_data(func, has_weight=False, **kwargs):
+
+    if has_weight:
+        def func_cropped(input, target, weight, **kwargs):
+            if target.ndim>1:
+                if input.shape[2:]!=target.shape[1:]:
+                    target = center_crop_tensor(target.squeeze(1), (input.shape[0],)+input.shape[2:])
+                weight = center_crop_tensor(weight.squeeze(1), (input.shape[0],)+input.shape[2:])
+            return func(input, target, weight, **kwargs)
+    else:
+        def func_cropped(input, target, **kwargs):
+            if target.ndim>1:
+                if input.shape[2:]!=target.shape[1:]:
+                    target = center_crop_tensor(target.squeeze(1), (input.shape[0],)+input.shape[2:])
+            return func(input, target, **kwargs)
+
+    return func_cropped
+
+def center_crop_tensor(tensor, out_shape):
+    '''Center crop a tensor without copying its contents.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        The tensor to be cropped
+    out_shape : tuple
+        Desired shape
+
+    Returns
+    -------
+    tensor : torch.Tensor
+        A new view of the tensor with shape out_shape
+    '''
+
+    out_shape = torch.tensor(out_shape)
+    tensor_shape = torch.tensor(tensor.shape)
+    shape_diff = (tensor_shape - out_shape)//2
+
+    for dim_idx, sd in enumerate(shape_diff):
+        tensor = tensor.narrow(dim_idx, sd, out_shape[dim_idx])
+
+    return tensor
+
+def center_expand_tensor(self, tensor, out_shape):
+    '''Center expand a tensor. Assumes `tensor` is not larger than `out_shape`
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        The tensor to be expanded
+    out_shape : tuple
+        Desired shape
+
+    Returns
+    -------
+    torch.Tensor
+        A new tensor with shape out_shape
+    '''
+
+    out_shape = torch.tensor(out_shape)
+    tensor_shape = torch.tensor(tensor.shape)
+    shape_diff = (out_shape - tensor_shape)
+
+    pad = []
+    for dim_idx, sd in enumerate(shape_diff.flip(0)):
+        if sd%2==0:
+            pad += [sd//2, sd//2]
+        else:
+            pad += [sd//2, sd//2+1]
+
+    return F.pad(tensor, pad)
+
 
 class SmoothenValue:
     '''Create weighted moving average.'''
