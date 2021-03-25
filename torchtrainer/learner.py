@@ -3,6 +3,7 @@ Class used for training a Pytorch neural network.
 '''
 
 import torch
+from torch.optim.lr_scheduler import LambdaLR
 
 class Learner:
     """Class used for training a Pytorch neural network.
@@ -59,10 +60,11 @@ class Learner:
                  acc_funcs=None, main_acc_func='loss', checkpoint_file='./learner.tar',
                  scheduler_step_epoch=True, callbacks=None, device=None):
 
+        
+        if scheduler is None:
+            LambdaLR(optm, lambda x: 1)  # Fixed learning rate
         if acc_funcs is None:
-            self.acc_funcs = {}
-        else:
-            self.acc_funcs = acc_funcs
+            acc_funcs = {}
         if callbacks is None:
             callbacks = []
         if device is None:
@@ -70,19 +72,19 @@ class Learner:
                 device = torch.device('cuda')
             else:
                 device = torch.device('cpu')
-            self.device = device
 
         self.model = model
         self.loss_func = loss_func
         self.optm = optm
         self.train_dl = train_dl
-        self.scheduler = scheduler
         self.valid_dl = valid_dl
-        self.callbacks = callbacks
-        self.device = device
+        self.scheduler = scheduler
+        self.acc_funcs = acc_funcs
         self.main_acc_func = main_acc_func
         self.checkpoint_file = checkpoint_file
         self.scheduler_step_epoch = scheduler_step_epoch
+        self.callbacks = callbacks
+        self.device = device 
 
         self.train_loss_history = []
         self.valid_loss_history = []
@@ -91,8 +93,7 @@ class Learner:
             acc_funcs_history[k] = []
         self.acc_funcs_history = acc_funcs_history
 
-        nb, nc, h, w = self.get_output_shape()
-        self.crop_shape = (h, w)
+        #nb, nc, h, w = self.get_output_shape()
 
         self.lr_history = []
         self.epoch = 0
@@ -115,23 +116,16 @@ class Learner:
         self.model.to(self.device)
         self._print_epoch_info_header()
         for epoch in range(epochs):
-            self._fit_one_epoch()
+            self._train_one_epoch()
+            self._validate()
+
+            if (self.scheduler is not None) and self.scheduler_step_epoch:
+                self.lr_history.append(self.scheduler.get_last_lr())
+                self.scheduler.step()
             self._print_epoch_info()
 
             self._check_if_better_score()
             self.epoch += 1
-
-
-    def _fit_one_epoch(self):
-        '''Train model for one epoch. Also applies validation.
-        '''
-
-        self._train_one_epoch()
-        self._validate_one_epoch()
-
-        if (self.scheduler is not None) and self.scheduler_step_epoch:
-            self.lr_history.append(self.scheduler.get_lr())
-            self.scheduler.step()
 
     def _train_one_epoch(self):
         '''Train model for one epoch.
@@ -140,13 +134,13 @@ class Learner:
         self.model.train()
         train_loss = 0.
         for item_collection in self.train_dl:
-            loss = self._apply_to_batch(*item_collection)
+            loss, _, _ = self._apply_model_to_batch(*item_collection)
             loss.backward()
             self.optm.step()
             self.optm.zero_grad()
 
             if (self.scheduler is not None) and (not self.scheduler_step_epoch):
-                self.lr_history.append(self.scheduler.get_lr())
+                self.lr_history.append(self.scheduler.get_last_lr())
                 self.scheduler.step()
 
             with torch.no_grad():
@@ -154,7 +148,7 @@ class Learner:
 
         self.train_loss_history.append(train_loss/len(self.train_dl))
 
-    def _validate_one_epoch(self):
+    def _validate(self):
         '''Validate the model for one epoch.
         '''
 
@@ -163,7 +157,7 @@ class Learner:
         valid_acc = dict(zip(self.acc_funcs.keys(), [0.]*len(self.acc_funcs)))
         with torch.no_grad():
             for item_collection in self.valid_dl:
-                loss, predb, yb = self._apply_to_batch(*item_collection, ret_data=True)
+                loss, predb, yb = self._apply_model_to_batch(*item_collection)
 
                 valid_loss += loss.item()
                 accs = self._apply_acc_funcs(predb, yb)
@@ -177,7 +171,7 @@ class Learner:
             for cb in self.callbacks:
                 cb.on_epoch_end(item_collection[0], item_collection[1], predb, self.epoch)
 
-    def _apply_to_batch(self, xb, yb, wb=None, ret_data=False):
+    def _apply_model_to_batch(self, xb, yb, wb=None):
         '''Given an input and target batch, and optionaly a loss weights batch, apply
         the model to the data and calculates loss.
 
@@ -206,19 +200,15 @@ class Learner:
 
         device = self.device
         xb, yb = xb.to(device, torch.float32), yb.to(device, torch.long)
+        predb = self.model(xb)
+
         if wb is None:
-            wb_cropped = None
+            loss = self.loss_func(predb, yb)
         else:
             wb = wb.to(device, torch.float32)
-            wb_cropped = self.center_crop_tensor(wb.squeeze(1), (wb.shape[0],)+self.crop_shape)
-        predb = self.model(xb)
-        yb_cropped = self.center_crop_tensor(yb.squeeze(1), (yb.shape[0],)+self.crop_shape)
-        loss = self.loss_func(predb, yb_cropped, wb_cropped)
-
-        if ret_data:
-            return loss, predb, yb_cropped
-        else:
-            return loss
+            loss = self.loss_func(predb, yb, wb)
+        
+        return loss, predb, yb
 
     def _print_epoch_info_header(self):
         '''Print table header shown during training'''
@@ -380,24 +370,23 @@ class Learner:
         '''
         # TODO: Implement TTA augmentation
 
+        self.model.to(self.device)
         self.model.eval()
         with torch.no_grad():
             xb = xb.to(self.device, torch.float32)
-            predb = self.model(xb)
+            predb = self.model(xb).to('cpu')
 
             if return_classes:
                 classes_predb = torch.argmax(predb, dim=1).to('cpu', torch.uint8)
 
             if yb is None:
                 if return_classes:
-                    return classes_predb, None
+                    return classes_predb
                 else:
-                    return predb, None
+                    return predb
             else:
-                yb = yb.to(self.device, torch.long)
-                yb_cropped = self.center_crop_tensor(yb.squeeze(1), (xb.shape[0],)+self.crop_shape)
 
-                predb_acc = self._apply_acc_funcs(predb, yb_cropped)
+                predb_acc = self._apply_acc_funcs(predb, yb)
 
                 if return_classes:
                     return classes_predb, predb_acc
@@ -419,14 +408,16 @@ class Learner:
             List of calculated accuracies in the same order as the functions stored in self.acc_funcs
         '''
 
-        test_acc = [0.]*len(self.acc_funcs)
+        test_acc = dict(zip(self.acc_funcs.keys(), [0.]*len(self.acc_funcs)))
         with torch.no_grad():
-            for xb,yb in test_dl:
+            for xb, yb in test_dl:
                 _, pred_acc = self.pred(xb, yb)
-                for idx, (k,v) in enumerate(pred_acc.items()):
-                    test_acc[idx] += v
+                for idx, (k, v) in enumerate(pred_acc.items()):
+                    test_acc[k] += v
 
-        return [v/len(test_dl) for v in test_acc]
+        test_acc = {k:v/len(test_dl) for k, v in test_acc.items()}
+
+        return test_acc
 
     def get_output_shape(self):
         '''Calculate the output shape of the model from one of the items in the dataset.
@@ -437,7 +428,7 @@ class Learner:
             Shape of the output from the model
         '''
 
-        xb, *_ = next(iter(self.train_dl))
+        xb, *_ = next(iter(self.train_dl.dataset[0]))
 
         self.model.to(self.device)
         xb = xb.to(self.device)
@@ -446,62 +437,6 @@ class Learner:
         self.model.to('cpu')
 
         return pred.shape
-
-    @staticmethod
-    def center_crop_tensor(tensor, out_shape):
-        '''Center crop a tensor without copying its contents.
-
-        Parameters
-        ----------
-        tensor : torch.Tensor
-            The tensor to be cropped
-        out_shape : tuple
-            Desired shape
-
-        Returns
-        -------
-        tensor : torch.Tensor
-            A new view of the tensor with shape out_shape
-        '''
-
-        out_shape = torch.tensor(out_shape)
-        tensor_shape = torch.tensor(tensor.shape)
-        shape_diff = (tensor_shape - out_shape)//2
-
-        for dim_idx, sd in enumerate(shape_diff):
-            tensor = tensor.narrow(dim_idx, sd, out_shape[dim_idx])
-
-        return tensor
-
-    @staticmethod
-    def center_expand_tensor(self, tensor, out_shape):
-        '''Center expand a tensor. Assumes `tensor` is not larger than `out_shape`
-
-        Parameters
-        ----------
-        tensor : torch.Tensor
-            The tensor to be expanded
-        out_shape : tuple
-            Desired shape
-
-        Returns
-        -------
-        torch.Tensor
-            A new tensor with shape out_shape
-        '''
-
-        out_shape = torch.tensor(out_shape)
-        tensor_shape = torch.tensor(tensor.shape)
-        shape_diff = (out_shape - tensor_shape)
-
-        pad = []
-        for dim_idx, sd in enumerate(shape_diff.flip(0)):
-            if sd%2==0:
-                pad += [sd//2, sd//2]
-            else:
-                pad += [sd//2, sd//2+1]
-
-        return F.pad(tensor, pad)
 
     def get_history(self):
         '''Return the recorded history for some parameters and evaluations of this learner.
