@@ -7,6 +7,7 @@ import torch
 from IPython.display import display
 import matplotlib.pyplot as plt
 import random
+from ipywidgets import interact, fixed, IntSlider
 
 def pil_img_info(img, print_repr=False):
     '''Returns the following information about a PIL image:
@@ -268,7 +269,7 @@ class PerfVisualizer:
 class InteractiveVisualizer:
     """Copied from cortex notebook"""
     
-    def __init__(self, dataset_or, dataset_aug, model, perf_list=None, device=None):
+    def __init__(self, dataset, model, perf_list=None, device=None):
         
         if device is None:
             if torch.cuda.is_available():
@@ -279,8 +280,7 @@ class InteractiveVisualizer:
         model.to(device)
         model.eval()
         
-        self.dataset_or = dataset_or
-        self.dataset_aug = dataset_aug
+        self.dataset = dataset
         self.model = model
         self.perf_list = perf_list
         self.device = device
@@ -291,7 +291,7 @@ class InteractiveVisualizer:
         
     def init_plot(self):
         
-        plt.figure(figsize=[15,15])
+        plt.figure(figsize=[8,8])
         axs = []
         ims = []
         ax = plt.subplot(2, 2, 1)
@@ -335,8 +335,8 @@ class InteractiveVisualizer:
             axs[0].set_title(img_name)
             axs[3].set_title(f'{perf:.2f}')
             
-        xb_or, yb_or = self.dataset_or[img_idx]
-        xb_aug, yb_aug = self.dataset_aug[img_idx]
+        xb_or, yb_or, *_ = self.dataset.get_item(img_idx)
+        xb_aug, yb_aug, *_ = self.dataset[img_idx]
         predb = self.model(xb_aug.unsqueeze(0).to(self.device))
         bin_pred = torch.argmax(predb, dim=1)
         
