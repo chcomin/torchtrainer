@@ -66,7 +66,7 @@ class ResBlock(nn.Module):
 
         return out
 
-class Concat(nn.Module):
+class Concat_old(nn.Module):
     '''Module for concatenating two activations'''
 
     def __init__(self, concat_dim=1):
@@ -108,6 +108,31 @@ class Concat(nn.Module):
     def extra_repr(self):
         s = 'concat_dim={concat_dim}'
         return s.format(**self.__dict__)
+
+class Concat(nn.Module):
+    '''Module for concatenating two activations'''
+
+    def __init__(self, concat_dim=1):
+        super(Concat, self).__init__()
+        self.concat_dim = concat_dim
+
+    def forward(self, x1, x2):
+        # Inputs will be padded if not the same size
+
+        if x1.shape[self.concat_dim+1:]!=x2.shape[self.concat_dim+1:]:
+            x1, x2 = self.fix_shape(x1, x2)
+        return torch.cat((x1, x2), self.concat_dim)
+
+    def fix_shape(self, x1, x2):
+
+        x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode='nearest')
+
+        return x1, x2
+
+    def extra_repr(self):
+        s = 'concat_dim={concat_dim}'
+        return s.format(**self.__dict__)
+
 
 
 class Encoder(nn.Module):
@@ -192,6 +217,9 @@ class ResUNet(nn.Module):
         _a1 = self._l1(self.concat_a1(a1_, a2_up))
 
         final = self.final(_a1)
+        #print(f"a_mid:{a_mid.shape}, a_mid_up:{a_mid_up.shape}, _a4:{_a4.shape}, a4_up:{a4_up.shape}, "+
+        #      f"_a3:{_a3.shape}, a3_up:{a3_up.shape}, _a2:{_a2.shape}, a2_up:{a2_up.shape}, "+
+        #      f"_a1:{_a1.shape}, final:{final.shape}")
         return F.log_softmax(final, 1)
 
     def reset_parameters(self):
