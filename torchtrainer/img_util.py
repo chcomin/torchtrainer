@@ -6,6 +6,7 @@ from PIL import Image
 import torch
 from IPython.display import display
 import matplotlib.pyplot as plt
+import random
 
 def pil_img_info(img, print_repr=False):
     '''Returns the following information about a PIL image:
@@ -164,25 +165,28 @@ class PerfVisualizer:
         self.device = device
         self.model_pred_func = model_pred_func
 
-        self.performance_per_image()
-        self.plot_samples()
+        self._performance_per_image()
 
-
-    def performance_per_image(self, label_thresh=10):
+    def _performance_per_image(self, label_thresh=10):
 
         self.model.eval()
         self.model.to(self.device)
 
+        print_interv_perc = 5   # In percent
+
         num_samples = len(self.dataset)
+        print_interv = max([round(print_interv_perc*num_samples/100), 1])
+
         perf_dict = {}
         #print("allocated, allocated_bytes, segment, reserved_bytes, active, active_bytes")
         for idx, (img, label) in enumerate(self.dataset):
             if label.sum()>label_thresh:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
-                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc}
+                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc.item()}
 
-            if idx%100==0:
-                print(f'Evaluating images...{100*idx/num_samples:1.0f}%', end='\r')
+            perc = round(100*idx/num_samples)
+            if idx%print_interv==0 or idx==num_samples-1:
+                print(f'Evaluating images...{100*(idx+1)/num_samples:1.0f}%', end='\r')
                 '''memstats = torch.cuda.memory_stats(device)
                 print(memstats["allocation.all.peak"],
                 memstats["allocated_bytes.all.peak"],
@@ -198,21 +202,149 @@ class PerfVisualizer:
 
         return perf_list
 
-    def pred(self, xb, yb):
+    def pred(self, xb, yb, return_classes=False):
 
         with torch.no_grad():
             xb = xb.to(self.device, torch.float32)
-            predb = self.model(xb)
+            predb = self.model(xb).to('cpu')
 
             predb = predb.cpu()
             predb_acc = self.perf_func(predb, yb)
 
-        return predb_acc
+            if return_classes:
+                classes_predb = torch.argmax(predb, dim=1).to(torch.uint8)
+                return predb_acc, classes_predb
+            else:
+                return predb_acc
 
-    def plot_samples(self):
+    def plot_performance(self):
 
         perf_vals = [elem[1]['perf'] for elem in self.perf_list]
 
         plt.figure(figsize=[15,15])
         plt.plot(perf_vals, '-o')
         plt.ylim(0, 1)
+
+    def plot_samples(self, num_samples=5, which='worst', show_original=True):
+        """which must be {worst, top, random}."""
+           
+        perf_list = self.perf_list
+        if which=='worst':
+            samples_to_plot = perf_list[0:num_samples]
+        elif which=='best':
+            samples_to_plot = perf_list[-1:num_samples:-1]
+        elif which=='random':
+            samples_to_plot = random.sample(perf_list, num_samples)
+
+        plt.figure(figsize=[15, num_samples*6])
+        for idx in range(num_samples):
+            file, perf = samples_to_plot[idx]
+            img, label, *_ = self.dataset.get_item(perf['idx'])
+            img_transf, label_transf, *_ = self.dataset[perf['idx']]
+            _, bin_pred = self.pred(img_transf.unsqueeze(0), label_transf.unsqueeze(0), return_classes=True)
+            bin_pred = bin_pred[0]
+
+            if show_original:
+                img_show = img
+                label_show = label
+            else:
+                if img_transf.ndim==3:
+                    img_show = img_transf.permute(1, 2, 0)
+                else:
+                    img_show = img_transf
+                label_show = label_transf
+
+            plt.subplot(num_samples, 3, 3*idx+1)
+            plt.imshow(img_show, 'gray')
+            plt.title(file)
+
+            plt.subplot(num_samples, 3, 3*idx+2)
+            plt.imshow(label_show, 'gray')
+
+            plt.subplot(num_samples, 3, 3*idx+3)
+            plt.imshow(bin_pred, 'gray')
+            plt.title(perf['perf'])
+
+class InteractiveVisualizer:
+    """Copied from cortex notebook"""
+    
+    def __init__(self, dataset_or, dataset_aug, model, perf_list=None, device=None):
+        
+        if device is None:
+            if torch.cuda.is_available():
+                device = torch.device('cuda')
+            else:
+                device = torch.device('cpu')    
+        
+        model.to(device)
+        model.eval()
+        
+        self.dataset_or = dataset_or
+        self.dataset_aug = dataset_aug
+        self.model = model
+        self.perf_list = perf_list
+        self.device = device
+        
+        self.init_plot()
+        
+        interact(self.display_item, idx=IntSlider(min=0, max=len(perf_list)-1, step=1, continuous_update=False))
+        
+    def init_plot(self):
+        
+        plt.figure(figsize=[15,15])
+        axs = []
+        ims = []
+        ax = plt.subplot(2, 2, 1)
+        im = ax.imshow(torch.zeros(100, 100), 'gray', vmin=0, vmax=255)
+        ax.axis('off')
+        axs.append(ax)
+        ims.append(im)
+            
+        ax = plt.subplot(2, 2, 2)
+        im = ax.imshow(torch.zeros((100, 100)), cmap='gray', vmin=0, vmax=1)
+        ax.axis('off')
+        axs.append(ax)
+        ims.append(im)
+        
+        ax = plt.subplot(2, 2, 3)
+        im = ax.imshow(torch.zeros((100, 100, 3)))
+        ax.axis('off')
+        axs.append(ax)
+        ims.append(im)
+        
+        ax = plt.subplot(2, 2, 4)
+        im = ax.imshow(torch.zeros((100, 100, 3)), cmap='gray', vmin=0, vmax=1)
+        ax.axis('off')
+        axs.append(ax)
+        ims.append(im)
+            
+        self.axs = axs
+        self.ims = ims
+    
+    def display_item(self, idx):
+
+        ims = self.ims
+        axs = self.axs
+        
+        if self.perf_list is None:
+            img_idx = idx
+        else:
+            item = self.perf_list[idx]
+            img_name, data  = item
+            img_idx, perf = data['idx'], data['perf']
+            axs[0].set_title(img_name)
+            axs[3].set_title(f'{perf:.2f}')
+            
+        xb_or, yb_or = self.dataset_or[img_idx]
+        xb_aug, yb_aug = self.dataset_aug[img_idx]
+        predb = self.model(xb_aug.unsqueeze(0).to(self.device))
+        bin_pred = torch.argmax(predb, dim=1)
+        
+        ims[0].set_data(xb_or)
+        ims[1].set_data(yb_or)
+        ims[2].set_data(xb_aug.unsqueeze(3).transpose(0, 3).squeeze())
+        ims[3].set_data(bin_pred.squeeze().cpu())
+        
+        axs[1].set_title('Target')
+        axs[2].set_title('Augmented image')
+        axs[0].figure.canvas.draw()

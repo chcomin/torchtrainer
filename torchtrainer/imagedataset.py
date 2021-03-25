@@ -70,6 +70,7 @@ class ImageDataset(torch_dataset.Dataset):
         self.name_to_label_map = name_to_label_map
         self.img_opener = img_opener
         self.transforms = transforms
+        self.apply_transform = True
 
         img_file_paths = []
         for img_file_path in img_dir.iterdir():
@@ -90,7 +91,10 @@ class ImageDataset(torch_dataset.Dataset):
         img = self.img_opener(img_file_path)
         label = self.name_to_label_map(img_file_path.name)
 
-        ret_transf = self.apply_transforms(self.transforms, img)
+        if self.apply_transform == True:
+            ret_transf = self.apply_transforms(self.transforms, img)
+        else:
+            ret_transf = img
 
         # Hack for fastai
         if isinstance(ret_transf, torch.Tensor):
@@ -114,6 +118,10 @@ class ImageDataset(torch_dataset.Dataset):
         transforms = copy.copy(self.transforms)
         return self.__class__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
                               transforms=transforms)
+
+    def set_transforms(self, transforms):
+
+        self.transforms = transforms
 
     def check_dataset(self):
         '''Check if all images in the dataset can be read, and if the transformations
@@ -302,6 +310,9 @@ class ImageDataset(torch_dataset.Dataset):
 
         return ret_transf, label
 
+    def set_apply_transform(self, apply_transform):
+        self.apply_transform = apply_transform
+
 class ImageSegmentationDataset(ImageDataset):
     """Dataset storage class.
 
@@ -373,10 +384,15 @@ class ImageSegmentationDataset(ImageDataset):
 
         if self.weight_func is not None:
             weight = self.weight_func(img, label, img_file_path)
-            ret_transf = self.apply_transforms(self.transforms, img, label, weight)
+            if self.apply_transform:
+                ret_transf = self.apply_transforms(self.transforms, img, label, weight)
+            else:
+                ret_transf = [img, label, weight]
         else:
-            ret_transf = self.apply_transforms(self.transforms, img, label)
-
+            if self.apply_transform:
+                ret_transf = self.apply_transforms(self.transforms, img, label)
+            else:
+                ret_transf = [img, label]
         # Hack for fastai
         #for r in ret_transf:
         #    r.size = lambda dim: r.shape[1:]
@@ -433,7 +449,7 @@ class ImageSegmentationDataset(ImageDataset):
                 vals = transform(*vals)
         return vals
 
-    def get_img(self, idx, transforms=None):
+    def get_item(self, idx, transforms=None):
         '''Same behavior as self.__getitem__() but does not apply transformation functions. Custom
         transformation functions can be passed as an optional parameter.'''
 
@@ -463,6 +479,8 @@ class ImageSegmentationDataset(ImageDataset):
             ret_transf[1] = ret_transf[1].long().squeeze()
 
         return ret_transf
+
+
 
 class TensorShape(tuple):
     '''Class for adding a `size` atribute on tensors that works on both PyTorch, Jupyter and Fastai.'''
