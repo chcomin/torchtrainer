@@ -4,12 +4,102 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
+def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, groups=groups, bias=False, dilation=dilation)
+
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
 def ntuple(x, n):
     '''Verify if x is iterable. If not, create tuple containing x repeated n times'''
 
     if isinstance(x, Iterable):
         return x
     return tuple([x]*n)
+
+class ResBlock(nn.Module):
+
+    def __init__(self, inplanes, planes, stride=1, norm_layer=None):
+        super(ResBlock, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        self.stride = stride
+
+        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = norm_layer(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = norm_layer(planes)
+
+        if (inplanes!=planes) or (stride>1):
+            # If in and out planes are different, we also need to change the planes of the input
+            # If stride is not 1, we need to change the size of the input
+            reshape_input = nn.Sequential(
+                                    conv1x1(inplanes, planes, stride),
+                                    norm_layer(planes),
+                            )
+            self.reshape_input = reshape_input
+        else:
+            self.reshape_input = None
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.reshape_input is not None:
+            identity = self.reshape_input(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+class Concat(nn.Module):
+    '''Module for concatenating two activations using interpolation'''
+
+    def __init__(self, concat_dim=1):
+        super(Concat, self).__init__()
+        self.concat_dim = concat_dim
+
+    def forward(self, x1, x2):
+        # Inputs will be padded if not the same size
+
+        if x1.shape[self.concat_dim+1:]!=x2.shape[self.concat_dim+1:]:
+            x1, x2 = self.fix_shape(x1, x2)
+        return torch.cat((x1, x2), self.concat_dim)
+
+    def fix_shape(self, x1, x2):
+
+        x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode='nearest')
+
+        return x1, x2
+
+    def extra_repr(self):
+        s = 'concat_dim={concat_dim}'
+        return s.format(**self.__dict__)
+
+class Blur(nn.Module):
+
+    def __init__(self):
+        super(Blur, self).__init__()
+
+        self.pad = nn.ReplicationPad2d((0,1,0,1))
+        self.blur = nn.AvgPool2d(2, stride=1)
+
+    def forward(self, x):
+
+        return self.blur(self.pad(x))
 
 class Conv2dCH(nn.Module):
     """Create 2D cross-hair convolution filter. Parameters are the same as torch.nn.Conv2d, with the exception

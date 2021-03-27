@@ -10,6 +10,7 @@ from torch.utils.data import dataloader as torch_dataloader
 import torch
 import bisect
 import copy
+from .transforms import TransfToTensor, TransfToPil
 
 class ImageDataset(torch_dataset.Dataset):
     """Dataset storage class.
@@ -56,7 +57,7 @@ class ImageDataset(torch_dataset.Dataset):
     """
 
     def __init__(self, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 transforms=None):
+                 transforms=None, on_memory=False):
 
         if isinstance(img_dir, str):
             img_dir = Path(img_dir)
@@ -72,6 +73,7 @@ class ImageDataset(torch_dataset.Dataset):
         self.img_opener = img_opener
         self.transforms = transforms
         self.apply_transform = True
+        self.on_memory = on_memory
 
         img_file_paths = []
         for img_file_path in img_dir.iterdir():
@@ -85,25 +87,29 @@ class ImageDataset(torch_dataset.Dataset):
 
         self.img_file_paths = img_file_paths
 
+        if on_memory:
+            self.load_on_memory()
+
     def __getitem__(self, idx):
 
-        img_file_path = self.img_file_paths[idx]
-
-        img = self.img_opener(img_file_path)
-        label = self.name_to_label_map(img_file_path.name)
+        if self.on_memory:
+            img, label = self.cache['imgs'][idx], self.cache['labels'][idx]
+            img = TransfToPil()(img)
+        else:
+            img, label = self.get_item(idx)
 
         if self.apply_transform == True:
-            ret_transf = self.apply_transforms(self.transforms, img)
+            img_transf = self.apply_transforms(self.transforms, img)
         else:
-            ret_transf = img
+            img_transf = img
 
         # Hack for fastai
-        if isinstance(ret_transf, torch.Tensor):
-            ret_transf.size = TensorShape(ret_transf.shape[1:])
+        if isinstance(img_transf, torch.Tensor):
+            img_transf.size = TensorShape(img_transf.shape[1:])
         if not isinstance(label, torch.Tensor):
             label = torch.tensor(label)
 
-        return ret_transf, label
+        return img_transf, label
 
     def __len__(self):
 
@@ -295,8 +301,11 @@ class ImageDataset(torch_dataset.Dataset):
         vals : Image-like
             Resulting images. Either (img, label) if weight is None or (img, label, weight) otherwise
         '''
-        for transform in transforms:
-                img = transform(img)
+        if callable(transforms):
+            img = transforms(img)
+        else:
+            for transform in transforms:
+                    img = transform(img)
         return img
 
     def get_item(self, idx, transforms=None):
@@ -311,16 +320,34 @@ class ImageDataset(torch_dataset.Dataset):
         img = self.img_opener(img_file_path)
         label = self.name_to_label_map(img_file_path.name)
 
-        ret_transf = self.apply_transforms(transforms, img)
+        img_transf = self.apply_transforms(transforms, img)
 
         # Hack for fastai
-        if isinstance(ret_transf, torch.Tensor):
-            ret_transf.size = TensorShape(ret_transf.shape[1:])
+        if isinstance(img_transf, torch.Tensor):
+            img_transf.size = TensorShape(img_transf.shape[1:])
+        if not isinstance(label, torch.Tensor):
+            label = torch.tensor(label)
 
-        return ret_transf, label
+        return img_transf, label
 
     def set_apply_transform(self, apply_transform):
         self.apply_transform = apply_transform
+
+    def load_on_memory(self):
+
+        img_file_paths = self.img_file_paths
+        img, label = self.get_item(0)
+
+        img = TransfToTensor()(img)
+        imgs = torch.zeros((len(img_file_paths),)+img.shape, dtype=img.dtype)
+        labels = torch.zeros(len(img_file_paths), dtype=torch.long)
+        imgs[0] = img
+        labels[0] = label
+        for img_idx, img_file_path in enumerate(img_file_paths[1:], start=1):
+            img, label = self.get_item(img_idx)
+            imgs[img_idx], labels[img_idx] = TransfToTensor()(img), label
+
+        self.cache = {'imgs':imgs, 'labels':labels}            
 
 class ImageSegmentationDataset(ImageDataset):
     """Dataset storage class.
@@ -367,10 +394,10 @@ class ImageSegmentationDataset(ImageDataset):
     """
 
     def __init__(self, img_dir, label_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 label_opener=None, transforms=None, weight_func=None):
+                 label_opener=None, transforms=None, weight_func=None, cached=False):
 
         super().__init__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
-                 transforms=transforms)
+                 transforms=transforms, cached=cached)
 
         if isinstance(label_dir, str):
             label_dir = Path(label_dir)
@@ -385,34 +412,24 @@ class ImageSegmentationDataset(ImageDataset):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        img_file_path = self.img_file_paths[idx]
+        item = self.get_item(idx)
 
-        img = self.img_opener(img_file_path)
-        label_file_path = self.label_path_from_image_path(img_file_path)
-        label = self.label_opener(label_file_path)
-
-        if self.weight_func is not None:
-            weight = self.weight_func(img, label, img_file_path)
-            if self.apply_transform:
-                ret_transf = self.apply_transforms(self.transforms, img, label, weight)
-            else:
-                ret_transf = [img, label, weight]
+        if self.apply_transform:
+            item_transf = self.apply_transforms(self.transforms, *item)
         else:
-            if self.apply_transform:
-                ret_transf = self.apply_transforms(self.transforms, img, label)
-            else:
-                ret_transf = [img, label]
+            item_transf = item
+
         # Hack for fastai
         #for r in ret_transf:
         #    r.size = lambda dim: r.shape[1:]
-        for r in ret_transf:
+        for r in item_transf:
             if isinstance(r, torch.Tensor):
                 r.size = TensorShape(r.shape[1:])
 
-        if isinstance(ret_transf[1], torch.Tensor):
-            ret_transf[1] = ret_transf[1].long().squeeze()  # Label image
+        if isinstance(item_transf[1], torch.Tensor):
+            item_transf[1] = item_transf[1].long().squeeze()  # Label image
 
-        return ret_transf
+        return item_transf
 
     def subset(self, filename_filter):
 
@@ -451,12 +468,16 @@ class ImageSegmentationDataset(ImageDataset):
         '''
 
         if weight is None:
-            vals = [img, label]
+            item = [img, label]
         else:
-            vals = [img, label, weight]
-        for transform in transforms:
-                vals = transform(*vals)
-        return vals
+            item = [img, label, weight]
+
+        if callable(transforms):
+            item = transforms(*item)
+        else:
+            for transform in transforms:
+                    item = transform(*item)
+        return item
 
     def get_item(self, idx, transforms=None):
         '''Same behavior as self.__getitem__() but does not apply transformation functions. Custom
@@ -471,23 +492,24 @@ class ImageSegmentationDataset(ImageDataset):
         label_file_path = self.label_path_from_image_path(img_file_path)
         label = self.label_opener(label_file_path)
 
+        item = [img, label]
         if self.weight_func is not None:
             weight = self.weight_func(img, label, img_file_path)
-            ret_transf = self.apply_transforms(transforms, img, label, weight)
-        else:
-            ret_transf = self.apply_transforms(transforms, img, label)
+            item.append(weight)
+        
+        item_transf = self.apply_transforms(transforms, *item)
 
         # Hack for fastai
         #for r in ret_transf:
         #    r.size = lambda dim: r.shape[1:]
-        for r in ret_transf:
+        for r in item_transf:
             if isinstance(r, torch.Tensor):
                 r.size = TensorShape(r.shape[1:])
 
         if isinstance(r, torch.Tensor):
-            ret_transf[1] = ret_transf[1].long().squeeze()
+            item_transf[1] = item_transf[1].long().squeeze()
 
-        return ret_transf
+        return item_transf
 
 
 

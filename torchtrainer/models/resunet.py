@@ -4,136 +4,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
+from .layers import ResBlock, Concat, Blur
 
 # For importing in both the notebook and in the .py file
 try:
     import ActivationSampler
 except ImportError:
     from torchtrainer.module_util import ActivationSampler
-
-def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, groups=groups, bias=False, dilation=dilation)
-
-
-def conv1x1(in_planes, out_planes, stride=1):
-    """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
-
-
-class ResBlock(nn.Module):
-
-    def __init__(self, inplanes, planes, stride=1, norm_layer=None):
-        super(ResBlock, self).__init__()
-        if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
-        self.stride = stride
-
-        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
-        self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = norm_layer(planes)
-
-        if (inplanes!=planes) or (stride>1):
-            # If in and out planes are different, we also need to change the planes of the input
-            # If stride is not 1, we need to change the size of the input
-            reshape_input = nn.Sequential(
-                                    conv1x1(inplanes, planes, stride),
-                                    norm_layer(planes),
-                            )
-            self.reshape_input = reshape_input
-        else:
-            self.reshape_input = None
-
-    def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.reshape_input is not None:
-            identity = self.reshape_input(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-class Concat_old(nn.Module):
-    '''Module for concatenating two activations'''
-
-    def __init__(self, concat_dim=1):
-        super(Concat, self).__init__()
-        self.concat_dim = concat_dim
-
-    def forward(self, x1, x2):
-        # Inputs will be padded if not the same size
-
-        x1, x2 = self.pad_inputs(x1, x2)
-        return torch.cat((x1, x2), self.concat_dim)
-
-    def pad_inputs(self, x1, x2):
-
-        cd = self.concat_dim
-        shape_diff = tensor(x2.shape[cd+1:]) - tensor(x1.shape[cd+1:])
-        pad1 = []
-        pad2 = []
-        for sd in shape_diff.flip(0):
-            sd_abs = abs(sd.item())
-            if sd%2==0:
-                pb = pe = sd_abs//2
-            else:
-                pb = sd_abs//2
-                pe = pb + 1
-
-            if sd>=0:
-                pad1 += [pb, pe]
-                pad2 += [0, 0]
-            else:
-                pad1 += [0, 0]
-                pad2 += [pb, pe]
-
-        x1 = F.pad(x1, pad1)
-        x2 = F.pad(x2, pad2)
-
-        return x1, x2
-
-    def extra_repr(self):
-        s = 'concat_dim={concat_dim}'
-        return s.format(**self.__dict__)
-
-class Concat(nn.Module):
-    '''Module for concatenating two activations'''
-
-    def __init__(self, concat_dim=1):
-        super(Concat, self).__init__()
-        self.concat_dim = concat_dim
-
-    def forward(self, x1, x2):
-        # Inputs will be padded if not the same size
-
-        if x1.shape[self.concat_dim+1:]!=x2.shape[self.concat_dim+1:]:
-            x1, x2 = self.fix_shape(x1, x2)
-        return torch.cat((x1, x2), self.concat_dim)
-
-    def fix_shape(self, x1, x2):
-
-        x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode='nearest')
-
-        return x1, x2
-
-    def extra_repr(self):
-        s = 'concat_dim={concat_dim}'
-        return s.format(**self.__dict__)
-
-
 
 class Encoder(nn.Module):
     '''Encoder part of U-Net'''
@@ -239,15 +116,3 @@ class ResUNet(nn.Module):
         input_img = input_img.to(next(model.parameters()).device)
         output = self(input_img)
         return output[0, 0].shape
-
-class Blur(nn.Module):
-
-    def __init__(self):
-        super(Blur, self).__init__()
-
-        self.pad = nn.ReplicationPad2d((0,1,0,1))
-        self.blur = nn.AvgPool2d(2, stride=1)
-
-    def forward(self, x):
-
-        return self.blur(self.pad(x))

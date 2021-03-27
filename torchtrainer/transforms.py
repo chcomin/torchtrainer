@@ -175,6 +175,11 @@ class TransfWhitten(Transform):
     def __init__(self, mean, std):
         super().__init__(transf_img=True, transf_label=False, transf_weight=False)
 
+        if not isinstance(mean, torch.Tensor):
+            mean = torch.tensor(mean)
+        if not isinstance(std, torch.Tensor):
+            std = torch.tensor(std)
+
         self.mean = mean
         self.std = std
 
@@ -308,6 +313,23 @@ def seq_pil_to_imgaug_to_tensor(imgaug_seq):
     transform_funcs = [TransfToImgaug(), translate_imagaug_seq(imgaug_seq), TransfToTensor()]
 
     return transform_funcs
+
+class Compose:
+
+    def __init__(self, transforms):
+        """Compose a list of transforms
+        """
+        self.transforms = transforms
+
+    def __call__(self, img=None, label=None, weight=None):
+
+        item = [img, label, weight]
+        for transform in self.transforms:
+            if isinstance(item, (list, tuple)):
+                item = transform(*item)
+            else:
+                item = transform(item)
+        return item
 
 ''' Conversion between library formats
 By default, the transformations do not change pixel intensities and the datatypes are conserved.

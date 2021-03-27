@@ -288,6 +288,7 @@ class Learner:
                         'model' : str(self.model),
                         'train_loss_history' : self.train_loss_history,
                         'valid_loss_history' : self.valid_loss_history,
+                        'lr_history': self.lr_history,
                         'acc_funcs_history' : self.acc_funcs_history
                      }
 
@@ -339,6 +340,7 @@ class Learner:
         self.epoch = checkpoint['epoch']
         self.train_loss_history = checkpoint['train_loss_history']
         self.valid_loss_history = checkpoint['valid_loss_history']
+        self.lr_history = checkpoint['lr_history']
         self.acc_funcs_history = checkpoint['acc_funcs_history']
         self.best_score = checkpoint['best_score']
         self.checkpoint = checkpoint
@@ -466,6 +468,7 @@ class Learner:
 
         self.train_loss_history = []
         self.valid_loss_history = []
+        self.lr_history = []
         acc_funcs_history = {}
         for k, v in self.acc_funcs.items():
             acc_funcs_history[k] = []
