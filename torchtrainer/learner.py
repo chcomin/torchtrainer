@@ -54,11 +54,13 @@ class Learner:
         every batch.
     device : torch.device
         Device used for training
+
+    TODO: Model should be moved to `device` before constructing the optimizer
     """
 
     def __init__(self, model, loss_func, optm, train_dl, valid_dl, scheduler=None,
                  acc_funcs=None, main_acc_func='loss', checkpoint_file='./learner.tar',
-                 scheduler_step_epoch=True, callbacks=None, device=None):
+                 scheduler_step_epoch=True, callbacks=None, device=None, verbose=True):
 
         
         if scheduler is None:
@@ -85,6 +87,7 @@ class Learner:
         self.scheduler_step_epoch = scheduler_step_epoch
         self.callbacks = callbacks
         self.device = device 
+        self.verbose = verbose
 
         self.train_loss_history = []
         self.valid_loss_history = []
@@ -111,10 +114,9 @@ class Learner:
             Number of epochs for training
         '''
 
-        # Returns model, but it is not necessary to assign to new variable since the layers
-        # will be converted and copied to the GPU
         self.model.to(self.device)
-        self._print_epoch_info_header()
+        if self.verbose:
+            self._print_epoch_info_header()
         for epoch in range(epochs):
             self._train_one_epoch()
             self._validate()
@@ -122,7 +124,8 @@ class Learner:
             if (self.scheduler is not None) and self.scheduler_step_epoch:
                 self.lr_history.append(self.scheduler.get_last_lr())
                 self.scheduler.step()
-            self._print_epoch_info()
+            if self.verbose:
+                self._print_epoch_info()
 
             self._check_if_better_score()
             self.epoch += 1

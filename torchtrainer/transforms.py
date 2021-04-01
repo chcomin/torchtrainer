@@ -194,6 +194,11 @@ class TransfUnwhitten(Transform):
     def __init__(self, mean, std):
         super().__init__(transf_img=True, transf_label=False, transf_weight=False)
 
+        if not isinstance(mean, torch.Tensor):
+            mean = torch.tensor(mean)
+        if not isinstance(std, torch.Tensor):
+            std = torch.tensor(std)
+
         self.mean = mean
         self.std = std
 
