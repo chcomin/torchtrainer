@@ -80,7 +80,7 @@ class ImageDataset(torch_dataset.Dataset):
             img_filename = img_file_path.name
             if filename_filter is None:
                 img_file_paths.append(img_file_path)
-            elif isinstance(filename_filter, set):
+            elif isinstance(filename_filter, (set, list)):
                 if img_file_path.stem in filename_filter: img_file_paths.append(img_file_path)
             elif filename_filter(img_filename):
                 img_file_paths.append(img_file_path)
@@ -104,8 +104,8 @@ class ImageDataset(torch_dataset.Dataset):
             img_transf = img
 
         # Hack for fastai
-        if isinstance(img_transf, torch.Tensor):
-            img_transf.size = TensorShape(img_transf.shape[1:])
+        #if isinstance(img_transf, torch.Tensor):
+        #    img_transf.size = TensorShape(img_transf.shape[1:])
         if not isinstance(label, torch.Tensor):
             label = torch.tensor(label)
 
@@ -173,7 +173,7 @@ class ImageDataset(torch_dataset.Dataset):
         valid_set : float or list
             If float, a fraction `valid_set` of the dataset will be used for validation,
             the rest will be used for training.
-            If list, should containg the names of the files used for validation. The remaining
+            If list, should contain the names of the files used for validation. The remaining
             images will be used for training.
 
         Returns
@@ -323,8 +323,8 @@ class ImageDataset(torch_dataset.Dataset):
         img_transf = self.apply_transforms(transforms, img)
 
         # Hack for fastai
-        if isinstance(img_transf, torch.Tensor):
-            img_transf.size = TensorShape(img_transf.shape[1:])
+        #if isinstance(img_transf, torch.Tensor):
+        #    img_transf.size = TensorShape(img_transf.shape[1:])
         if not isinstance(label, torch.Tensor):
             label = torch.tensor(label)
 
@@ -394,10 +394,10 @@ class ImageSegmentationDataset(ImageDataset):
     """
 
     def __init__(self, img_dir, label_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 label_opener=None, transforms=None, weight_func=None, cached=False):
+                 label_opener=None, transforms=None, weight_func=None, on_memory=False):
 
         super().__init__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener,
-                 transforms=transforms, cached=cached)
+                 transforms=transforms, on_memory=on_memory)
 
         if isinstance(label_dir, str):
             label_dir = Path(label_dir)
@@ -412,7 +412,11 @@ class ImageSegmentationDataset(ImageDataset):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        item = self.get_item(idx)
+        if self.on_memory:
+            item = self.cache['imgs'][idx], self.cache['labels'][idx]
+            item = TransfToPil()(*item)
+        else:
+            item = self.get_item(idx)
 
         if self.apply_transform:
             item_transf = self.apply_transforms(self.transforms, *item)
@@ -420,11 +424,9 @@ class ImageSegmentationDataset(ImageDataset):
             item_transf = item
 
         # Hack for fastai
-        #for r in ret_transf:
-        #    r.size = lambda dim: r.shape[1:]
-        for r in item_transf:
-            if isinstance(r, torch.Tensor):
-                r.size = TensorShape(r.shape[1:])
+        #for r in item_transf:
+        #    if isinstance(r, torch.Tensor):
+        #        r.size = TensorShape(r.shape[1:])
 
         if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()  # Label image
@@ -500,18 +502,30 @@ class ImageSegmentationDataset(ImageDataset):
         item_transf = self.apply_transforms(transforms, *item)
 
         # Hack for fastai
-        #for r in ret_transf:
-        #    r.size = lambda dim: r.shape[1:]
-        for r in item_transf:
-            if isinstance(r, torch.Tensor):
-                r.size = TensorShape(r.shape[1:])
+        #for r in item_transf:
+        #    if isinstance(r, torch.Tensor):
+        #        r.size = TensorShape(r.shape[1:])
 
-        if isinstance(r, torch.Tensor):
+        if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()
 
         return item_transf
 
+    def load_on_memory(self):
 
+        img_file_paths = self.img_file_paths
+        img, label = self.get_item(0)
+
+        img = TransfToTensor()(img)
+        imgs = torch.zeros((len(img_file_paths),)+img.shape, dtype=img.dtype)
+        labels = torch.zeros_like(imgs, dtype=torch.long)
+        imgs[0] = img
+        labels[0] = label
+        for img_idx, img_file_path in enumerate(img_file_paths[1:], start=1):
+            img, label = self.get_item(img_idx)
+            imgs[img_idx], labels[img_idx] = TransfToTensor()(img, label)
+
+        self.cache = {'imgs':imgs, 'labels':labels}    
 
 class TensorShape(tuple):
     '''Class for adding a `size` atribute on tensors that works on both PyTorch, Jupyter and Fastai.'''
