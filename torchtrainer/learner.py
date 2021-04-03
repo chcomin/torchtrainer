@@ -81,6 +81,7 @@ class Learner:
         self.train_dl = train_dl
         self.valid_dl = valid_dl
         self.scheduler = scheduler
+        self.scheduler_init_state = scheduler.state_dict()
         self.acc_funcs = acc_funcs
         self.main_acc_func = main_acc_func
         self.checkpoint_file = checkpoint_file
@@ -103,7 +104,7 @@ class Learner:
         self.checkpoint = {}       # Will store best model found
         self.best_score = None
 
-    def fit(self, epochs):
+    def fit(self, epochs, lr=None):
         '''Train model for the given number of epochs. Each epoch consists in
         updating the weights for one pass in the training set and measuring loss
         and accuracies for one pass in the validation set.
@@ -113,6 +114,12 @@ class Learner:
         epochs : int
             Number of epochs for training
         '''
+
+        if lr is not None:
+            # Fix the learning rate
+            self.scheduler = None
+            for pg in self.optm.param_groups:
+                pg['lr'] = lr
 
         self.model.to(self.device)
         if self.verbose:
@@ -138,9 +145,9 @@ class Learner:
         train_loss = 0.
         for item_collection in self.train_dl:
             loss, _, _ = self._apply_model_to_batch(*item_collection)
+            self.optm.zero_grad()
             loss.backward()
             self.optm.step()
-            self.optm.zero_grad()
 
             if (self.scheduler is not None) and (not self.scheduler_step_epoch):
                 self.lr_history.append(self.scheduler.get_last_lr())
@@ -348,6 +355,24 @@ class Learner:
         self.best_score = checkpoint['best_score']
         self.checkpoint = checkpoint
 
+    def save_history(self, filename):
+
+        train_loss_history = self.train_loss_history
+        valid_loss_history = self.valid_loss_history
+        acc_funcs_history = self.acc_funcs_history
+
+        header = 'Epoch;Train loss;Valid loss'
+        for func_name in acc_funcs_history:
+            header += f';{func_name}'
+
+        with open(filename, 'w') as fd:
+            fd.write(header)
+            for epoch in range(len(train_loss_history)):
+                line_str = f'{epoch+1};{self.train_loss_history[epoch]:.5f};{valid_loss_history[epoch]:.5f}'
+                for func_name, acc_func_h in acc_funcs_history.items():
+                    line_str += f';{acc_func_h[epoch]:.5f}'
+                fd.write(line_str)
+
     def pred(self, xb, yb=None, return_classes=False):
         '''Apply model to a batch, model parameters are not updated.
 
@@ -486,7 +511,12 @@ class Learner:
         self.model.reset_parameters()     # Will probably not work for fastai model
         self.reset_history()
 
-    def set_optimizer(self, optm):
+    def reset_scheduler(self):
+        """Reset scheduler to its initial state"""
+
+        self.scheduler.load_state_dict(self.scheduler_init_state)
+
+    def set_optimizer(self, optm, *args, **kwargs):
         '''Set or update optimizer.
 
         Parameters
@@ -495,9 +525,9 @@ class Learner:
             New optimizer
         '''
 
-        self.optm = optm
+        self.optm = optm(self.model, *args, **kwargs)
 
-    def set_scheduler(self, scheduler):
+    def set_scheduler(self, scheduler, *args, **kwargs):
         '''Set or update the learning rate scheduler.
 
         Parameters
@@ -506,4 +536,4 @@ class Learner:
             New scheduler
         '''
 
-        self.scheduler = scheduler
+        self.scheduler = scheduler(self.optm, *args, **kwargs)
