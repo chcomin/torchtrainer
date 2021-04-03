@@ -285,6 +285,89 @@ class SmoothenValue:
         self.mov_avg = self.beta * self.mov_avg + (1 - self.beta) * val
         self.smooth = self.mov_avg / (1 - self.beta ** self.n)
 
+class FocalLoss(torch.nn.Module):
+    
+    def __init__(self, gamma=2., alpha=(1., 1.), reduction='mean'):
+        super().__init__()
+        
+        if not isinstance(alpha, torch.Tensor):
+            alpha = torch.tensor(alpha)
+        
+        self.gamma = gamma
+        self.alpha = alpha
+        self.reduction = reduction
+        
+    def forward(self, input, target):
+        
+        return focal_loss(input, target, self.alpha, self.gamma, self.reduction)
+        
+class FocalLossRaw(FocalLoss):
+    
+    def __init__(self, gamma=2., alpha=(1., 1.), reduction='mean', eps=1e-8):
+        """Same as `FocalLoss` but receives raw scores and applies a softmax function
+        to obtain probabilities."""
+
+        super().__init__(gamma, alpha, reduction)
+        
+        self.eps = eps
+                
+    def forward(self, input, target):
+        
+        probs = F.softmax(input, dim=1) + self.eps
+        return super().forward(probs, target)
+    
+def focal_loss(probs, target, alpha, gamma, reduction='mean'):
+    
+    pt = torch.gather(probs, 1, target.unsqueeze(1)).squeeze()
+    alpha = alpha[target]        # Broadcast alpha values
+    
+    loss_all = -alpha*(1-pt)**gamma*pt.log()   
+    if reduction == 'none':
+        loss = loss_all
+    elif reduction == 'mean':
+        loss = torch.mean(loss_all)
+    elif reduction == 'sum':
+        loss = torch.sum(loss_all)
+        
+    return loss
+
+class DiceLossRaw(torch.nn.Module):
+    
+    def __init__(self, squared=False, eps=1e-8):
+        super().__init__()
+        
+        self.squared = squared
+        self.eps = eps
+        
+    def forward(self, input, target):
+        
+        probs = F.softmax(input, dim=1)
+        return dice_loss(probs, target, self.squared, self.eps)
+    
+class DiceLoss(torch.nn.Module):
+    
+    def __init__(self, squared=False, eps=1e-8):
+        super().__init__()
+        
+        self.squared = squared
+        self.eps = eps
+        
+    def forward(self, input, target):
+        
+        return dice_loss(input, target, self.squared, self.eps)
+        
+def dice_loss(input, target, squared=False, eps=1e-8):       
+    
+    input_1 = input[:, 1]            # Probabilities for class 1
+
+    numerator = 2*torch.sum(input_1*target)
+    if squared:
+        input_1 = input_1**2
+        target = target**2
+    denominator = torch.sum(input_1) + torch.sum(target)
+
+    return 1 - (numerator + eps)/(denominator + eps)    
+
 class CocoPerf:
     
     def __init__(self, iou_thrs=None, which='precision'):
