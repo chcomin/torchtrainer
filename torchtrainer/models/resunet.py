@@ -97,7 +97,7 @@ class ResUNet(nn.Module):
         #print(f"a_mid:{a_mid.shape}, a_mid_up:{a_mid_up.shape}, _a4:{_a4.shape}, a4_up:{a4_up.shape}, "+
         #      f"_a3:{_a3.shape}, a3_up:{a3_up.shape}, _a2:{_a2.shape}, a2_up:{a2_up.shape}, "+
         #      f"_a1:{_a1.shape}, final:{final.shape}")
-        return F.log_softmax(final, 1)
+        return final
 
     def reset_parameters(self):
 
