@@ -10,7 +10,7 @@ import random
 from ipywidgets import interact, fixed, IntSlider
 
 def pil_img_info(img, print_repr=False):
-    '''Returns the following information about a PIL image:
+    """Return the following information about a PIL image:
     The color mode (RGB, L, F, etc)
     Width
     Height
@@ -30,7 +30,7 @@ def pil_img_info(img, print_repr=False):
     -------
     info_str : string
         Information about the image
-    '''
+    """
 
     if isinstance(img, Image.Image):
         info_str = f'''
@@ -51,7 +51,7 @@ def pil_img_info(img, print_repr=False):
     return info_str
 
 def tensor_info(tensor, print_repr=False):
-    '''Returns the following information about a torch tensor:
+    """Return the following information about a torch tensor:
     Shape
     Type
 
@@ -67,7 +67,7 @@ def tensor_info(tensor, print_repr=False):
     -------
     info_str : string
         Information about the tensor
-    '''
+    """
 
     if isinstance(tensor, torch.Tensor):
         info_str = f'''
@@ -84,7 +84,7 @@ def tensor_info(tensor, print_repr=False):
     return info_str
 
 def show(pil_img, binary=False):
-    '''Show PIL image in a Jupyter notebook
+    """Show PIL image in a Jupyter notebook
 
     Parameters
     ----------
@@ -93,11 +93,7 @@ def show(pil_img, binary=False):
     binary : bool
         If True, the image should be treated as binary. That is, the range
         [0, 1] is shown as [0, 255]
-
-    Returns
-    -------
-    None
-    '''
+    """
 
     if binary:
         palette = [  0,     0,   0,    # RGB value for color 0
@@ -108,7 +104,7 @@ def show(pil_img, binary=False):
     display(pil_img)
 
 def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, print_info=False):
-    '''Opens a PIL image
+    """Open a PIL image
 
     Parameters
     ----------
@@ -129,7 +125,7 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
     -------
     img : PIL.Image
         The PIL image
-    '''
+    """
 
     img = Image.open(img_file_path)
     if print_info: print(pil_img_info(img))
@@ -147,7 +143,7 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
     return img
 
 class PerfVisualizer:
-    '''Class for visualizing classification results in increasing order of the values returned by `perf_func`'''
+    """Class for visualizing classification results in increasing order of the values returned by `perf_func`"""
 
     def __init__(self, dataset, model, perf_func, model_pred_func=None, device=None):
 

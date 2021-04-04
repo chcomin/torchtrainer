@@ -1,21 +1,17 @@
-'''U-Net architecture with residual blocks'''
+"""U-Net architecture with residual blocks"""
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
 from .layers import ResBlock, Concat, Blur
-
-# For importing in both the notebook and in the .py file
-try:
-    import ActivationSampler
-except ImportError:
-    from torchtrainer.module_util import ActivationSampler
+from torchtrainer.module_util import ActivationSampler
 
 class Encoder(nn.Module):
-    '''Encoder part of U-Net'''
 
     def __init__(self, num_channels, reduce_by=1):
+        """Encoder part of U-Net"""
+
         super(Encoder, self).__init__()
 
         #num_planes = 64
@@ -34,9 +30,10 @@ class Encoder(nn.Module):
         return x
 
 class ResUNet(nn.Module):
-    # TODO: fix output size being different than input
 
     def __init__(self, num_channels, num_classes):
+        """U-Net with residual blocks."""
+
         super(ResUNet, self).__init__()
 
         self.encoder = Encoder(num_channels)
@@ -75,7 +72,6 @@ class ResUNet(nn.Module):
         a_mid_up = self.blur_mid_up(a_mid_up)
         a4_ = self.sample_a4_()
         _a4 = self._l4(self.concat_a4(a4_, a_mid_up))
-        # _a4 = F.dropout(_a4, p=0.2)
 
         a4_up = self.a4_up(_a4)
         a4_up = self.blur_a4_up(a4_up)
@@ -86,7 +82,6 @@ class ResUNet(nn.Module):
         a3_up = self.blur_a3_up(a3_up)
         a2_ = self.sample_a2_()
         _a2 = self._l2(self.concat_a2(a2_, a3_up))
-        # _a2 = F.dropout(_a2, p=0.2)
 
         a2_up = self.a2_up(_a2)
         a2_up = self.blur_a2_up(a2_up)
@@ -94,9 +89,7 @@ class ResUNet(nn.Module):
         _a1 = self._l1(self.concat_a1(a1_, a2_up))
 
         final = self.final(_a1)
-        #print(f"a_mid:{a_mid.shape}, a_mid_up:{a_mid_up.shape}, _a4:{_a4.shape}, a4_up:{a4_up.shape}, "+
-        #      f"_a3:{_a3.shape}, a3_up:{a3_up.shape}, _a2:{_a2.shape}, a2_up:{a2_up.shape}, "+
-        #      f"_a1:{_a1.shape}, final:{final.shape}")
+
         return final
 
     def reset_parameters(self):
@@ -113,6 +106,6 @@ class ResUNet(nn.Module):
     def get_shapes(self, img_shape):
 
         input_img = torch.zeros(img_shape)[None, None]
-        input_img = input_img.to(next(model.parameters()).device)
+        input_img = input_img.to(next(self.parameters()).device)
         output = self(input_img)
         return output[0, 0].shape
