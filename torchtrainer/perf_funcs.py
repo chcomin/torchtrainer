@@ -369,9 +369,9 @@ def dice_loss(input, target, squared=False, eps=1e-8):
     return 1 - (numerator + eps)/(denominator + eps)    
 
 class CocoPerf:
+    """Not the same as COCO, since detection scores are not considered."""
     
     def __init__(self, iou_thrs=None, which='precision'):
-        """Not the same as COCO, since detection scores are not considered."""
         
         if iou_thrs is None:
             iou_thrs = np.linspace(.5, 0.95, int(np.round((0.95 - .5) / .05)) + 1, endpoint=True)

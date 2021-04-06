@@ -11,18 +11,27 @@ from PIL import Image
 from functools import partial
 
 class Transform:
+    """Base transformation class. All other transformations should subclass this one. The number of 
+    outputs is always equal to the number of inputs. If transf_* is true, the respective apply_* 
+    will be applied. Otherwise, the identity transform is applied. Subclasses need to only implement 
+    the apply_* methods if the transformation is desired. If the method is not implemented,
+    the identity transform is applied.
+    
+    To summarize, if apply_* is implemented, the respective transform will be applied.
+    If apply_* is implemented but the respective transf_* attribute is False, the transform will
+    not be applied.
+
+    Parameters
+    ----------
+    transf_img : bool
+        If True, the first argument of __call__ will be transformed. Otherwise, the identity transformation is applied.
+    transf_label : bool
+        If True, the second argument of __call__ will be transformed. Otherwise, the identity transformation is applied.
+    transf_weight : bool
+        If True, the third argument of __call__ will be transformed. Otherwise, the identity transformation is applied.
+    """
 
     def __init__(self, transf_img=True, transf_label=True, transf_weight=True):
-        """The number of outputs is always equal to the number of inputs. If transf_*
-        is true, the respective apply_* will be applied. Otherwise, the identity
-        transform is applied. Subclasses need to only implement the apply_*
-        methods if the transformation is desired. If the method is not implemented,
-        the identity transform is applied.
-        
-        To summarize, if apply_* is implemented, the respective transform will be applied.
-        If apply_* is implemented but the respective transf_* is False, the transform will
-        not be applied.
-        """
 
         self.transf_img = transf_img
         self.transf_label = transf_label
@@ -50,15 +59,29 @@ class Transform:
         return img, label, weight
 
     def apply_img(self, img):
+        """Transformation for the image."""
+
         return img
 
     def apply_label(self, label):
+        """Transformation for the label."""
+
         return label
 
     def apply_weight(self, weight):
+        """Transformation for the weight array."""
+
         return weight
 
 class TransfNormalize(Transform):
+    """For an image having values in the range [0, 255], returns a new image with
+    values in the range [0, 1]. Can transform numpy arrays, PyTorch tensors, PIL images
+    and imgaug images.
+    
+    Parameters
+    ----------
+    See the documentation for the base class (Transform).
+    """
 
     def __init__(self, transf_img=True, transf_label=False, transf_weight=False):
         super().__init__(transf_img, transf_label, transf_weight)
@@ -119,6 +142,14 @@ class TransfNormalize(Transform):
         return True
 
 class TransfUnormalize(Transform):
+    """For an image having values in the range [0, 1], returns a new image with
+    values in the range [0, 255]. Note that the data type is converted to uint8. 
+    Can transform numpy arrays, PyTorch tensors, PIL images and imgaug images.
+    
+    Parameters
+    ----------
+    See the documentation for the base class (Transform).
+    """
 
     def __init__(self, transf_img=True, transf_label=False, transf_weight=False):
         super().__init__(transf_img, transf_label, transf_weight)
@@ -170,7 +201,13 @@ class TransfUnormalize(Transform):
         return weight
 
 class TransfWhitten(Transform):
-    """2D tensor transform."""
+    """Normalize each channel of an image as follows
+
+    O_c = (I_c - mean_c)/std_c
+
+    where I_c is a channel of the input image, O_c is a channel of the output image
+    and mean and std are vectors.
+    """
 
     def __init__(self, mean, std):
         super().__init__(transf_img=True, transf_label=False, transf_weight=False)
@@ -189,7 +226,14 @@ class TransfWhitten(Transform):
         return img_norm
 
 class TransfUnwhitten(Transform):
-    """2D tensor transform."""
+    """Unormalize each channel of an image as follows
+
+    O_c = I_c*std_c + mean_c
+
+    where I_c is a channel of the input image, O_c is a channel of the output image
+    and mean and std are vectors. This is useful for recovering the original image after
+    a TransfWhitten transformation.
+    """
 
     def __init__(self, mean, std):
         super().__init__(transf_img=True, transf_label=False, transf_weight=False)
@@ -208,7 +252,9 @@ class TransfUnwhitten(Transform):
         return img_norm
 
 class transfGrayToColor(Transform):
-    """2D tensor transform."""
+    """Copies the channel of an image three times, generating a grayscale image
+    in the rgb format.
+    """
 
     def apply_img(self, img):
 
@@ -220,7 +266,7 @@ class transfGrayToColor(Transform):
         return img_res
 
 class transfColorToGray(Transform):
-    """2D tensor transform."""
+    """Converts a color image to grayscale."""
 
     def apply_img(self, img):
 
@@ -229,7 +275,8 @@ class transfColorToGray(Transform):
         return img_res
 
 class TransfClahe(Transform):
-    """2D pil transform."""
+    """Applies the CLAHE algorithm. Function cv2.createCLAHE from OpenCV is used. Parameters `clip_limit` 
+    and `tile_shape` are the same as in the OpenCV function."""
 
     def __init__(self, clip_limit=2.0, tile_shape=(8, 8)):
         super().__init__(transf_img=True, transf_label=False, transf_weight=False)
@@ -273,7 +320,7 @@ class TransfClahe(Transform):
         return out_pil_img
 
 def translate_imagaug_seq(imgaug_seq):
-    '''Closure for translating arguments 'image', 'segmentation_maps' and 'heatmaps' of
+    '''Closure for translating keyword arguments names 'image', 'segmentation_maps' and 'heatmaps' of
     imgaug functions to 'img', 'label' and 'weight'
 
     Parameters
@@ -322,8 +369,12 @@ def seq_pil_to_imgaug_to_tensor(imgaug_seq):
 class Compose:
 
     def __init__(self, transforms):
-        """Compose a list of transforms
+        """Compose a list of transforms. For instance:
+        
+        ct = Compose([transfColorToGray, TransfNormalize, TransfClahe])
+        img_transf, label_transf = ct(img, label)
         """
+
         self.transforms = transforms
 
     def __call__(self, img=None, label=None, weight=None):
@@ -336,14 +387,15 @@ class Compose:
                 item = transform(item)
         return item
 
-''' Conversion between library formats
-By default, the transformations do not change pixel intensities and the datatypes are conserved.
-Transformations from and to tensor may change the number of channels.
-There is probably a better way to do these conversions!
+""" The transformations below are aimed at conversions between library formats. Libraries 
+numpy, pillow, pytorch and imgaug are implemented. By default, the transformations do not 
+change pixel intensities and the datatypes are conserved. Transformations from and to tensor 
+may change the number of channels.
 TODO: check dimensions and datatypes of inputs
-'''
+"""
 
 class TransfToNumpy(Transform):
+    """Transform PyTorch tensors, Pillow images or imgaug objects to numpy arrays."""
 
     def __init__(self, is_3d=False):
         super().__init__(transf_img=True, transf_label=True, transf_weight=True)
@@ -363,6 +415,7 @@ class TransfToNumpy(Transform):
             return apply_type_transf(tensor_to_numpy, img, label, weight, is_3d=self.is_3d)
 
 class TransfToTensor(Transform):
+    """Transform Numpy arrays, Pillow images or imgaug objects to PyTorch tensors."""
 
     def __init__(self, is_3d=False):
         super().__init__(transf_img=True, transf_label=True, transf_weight=True)
@@ -382,6 +435,7 @@ class TransfToTensor(Transform):
             return apply_type_transf(identity, img, label, weight)
 
 class TransfToPil(Transform):
+    """Transform Numpy arrays, PyTorch tensors or imgaug objects to Pillow images."""
 
     def apply(self, img=None, label=None, weight=None):
 
@@ -396,6 +450,7 @@ class TransfToPil(Transform):
             return apply_type_transf(tensor_to_pil, img, label, weight)
 
 class TransfToImgaug(Transform):
+    """Transform Numpy arrays, PyTorch tensors or Pillow images to imgaug objects."""
 
     def apply(self, img=None, label=None, weight=None):
 
