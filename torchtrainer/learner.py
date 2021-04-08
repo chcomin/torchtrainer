@@ -366,24 +366,24 @@ class Learner:
         self.best_score = checkpoint['best_score']
         self.checkpoint = checkpoint
 
-    def save_history(self, filename):
+    def save_history(self, filename, sep=';'):
         """Save the loss and accuracy history to a file."""
 
         train_loss_history = self.train_loss_history
         valid_loss_history = self.valid_loss_history
         acc_funcs_history = self.acc_funcs_history
 
-        header = 'Epoch;Train loss;Valid loss'
+        header = f'Epoch{sep}Train loss{sep}Valid loss'
         for func_name in acc_funcs_history:
-            header += f';{func_name}'
+            header += f'{sep}{func_name}'
 
         with open(filename, 'w') as fd:
-            fd.write(header)
+            fd.write(header+'\n')
             for epoch in range(len(train_loss_history)):
-                line_str = f'{epoch+1};{self.train_loss_history[epoch]:.5f};{valid_loss_history[epoch]:.5f}'
+                line_str = f'{epoch+1}{sep}{self.train_loss_history[epoch]:.5f}{sep}{valid_loss_history[epoch]:.5f}'
                 for func_name, acc_func_h in acc_funcs_history.items():
-                    line_str += f';{acc_func_h[epoch]:.5f}'
-                fd.write(line_str)
+                    line_str += f'{sep}{acc_func_h[epoch]:.5f}'
+                fd.write(line_str+'\n')
 
     def pred(self, xb, yb=None, return_classes=False):
         """Apply model to a batch, model parameters are not updated.
