@@ -1,8 +1,9 @@
 __pycache__/
 .ipynb_checkpoints/
-drive/data/*/
 *.tar
 cortex/
 .idea/
 coco/river/*
+drive/data/*/
+*/examples/data/
 runs/
