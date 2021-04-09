@@ -1,6 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 *.tar
+*.zip
 cortex/
 .idea/
 coco/river/*

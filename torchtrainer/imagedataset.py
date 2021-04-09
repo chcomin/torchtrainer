@@ -282,8 +282,8 @@ class ImageDataset(torch_dataset.Dataset):
             img_file_paths_train = [img_file_paths[ind] for ind in ind_train]
             img_file_paths_valid = [img_file_paths[ind] for ind in ind_valid]
 
-        img_file_paths_train = [file.stem for file in img_file_paths_train]
-        img_file_paths_valid = [file.stem for file in img_file_paths_valid]
+        img_file_paths_train = [file.name for file in img_file_paths_train]
+        img_file_paths_valid = [file.name for file in img_file_paths_valid]
 
         return img_file_paths_train, img_file_paths_valid
 
