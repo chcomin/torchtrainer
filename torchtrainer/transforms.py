@@ -251,7 +251,7 @@ class TransfUnwhitten(Transform):
         img_norm = img*self.std.view(-1, 1, 1) + self.mean.view(-1, 1, 1)
         return img_norm
 
-class transfGrayToColor(Transform):
+class TransfGrayToColor(Transform):
     """Copies the channel of an image three times, generating a grayscale image
     in the rgb format.
     """
@@ -265,7 +265,7 @@ class transfGrayToColor(Transform):
 
         return img_res
 
-class transfColorToGray(Transform):
+class TransfColorToGray(Transform):
     """Converts a color image to grayscale."""
 
     def apply_img(self, img):
