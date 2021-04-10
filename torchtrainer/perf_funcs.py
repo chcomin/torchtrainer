@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
-def accuracy(input, target, ignore_index=None):
+def iou(input, target, ignore_index=None):
     '''Calculate intersection over union for predicted probabilities. Assumes background has
     value 0 and the segmentation has value 1
 
@@ -33,8 +33,8 @@ def accuracy(input, target, ignore_index=None):
 
     return iou
 
-def get_prfa(input, target, meas='iou', reduce_batch=True, mask=None):
-    '''Calculate some accuracy measuremets for segmentation results. Assumes background has value 0 and
+def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=None):
+    '''Calculate some performance metrics for segmentation results. Assumes background has value 0 and
     the segmentation has value 1. If more than one image in batch, returns a single value representing the
     average performance for all images in the batch.
 
@@ -140,19 +140,19 @@ def get_prfa(input, target, meas='iou', reduce_batch=True, mask=None):
 
     return out_meas
 
-def build_acc_dict(get_prfa):
-    '''Build dictionary containing accuracy functions from `get_prfa`
+def build_segmentation_accuracy_dict():
+    '''Build dictionary containing performance metrics from `segmentation_accuracy`
 
     Returns
     -------
-    acc_dict : dict
-        Keys indicate accuracy name and values are respecive functions
+    metrics_dict : dict
+        Keys indicate metric name and values are respecive functions.
     '''
 
-    acc_dict = {}
+    metrics_dict = {}
     for mea in ['iou', 'f1', 'prec', 'rec']:
-        acc_dict[mea] = partial(get_prfa, meas=mea)
-    return acc_dict
+        metrics_dict[mea] = partial(segmentation_accuracy, meas=mea)
+    return metrics_dict
 
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
     '''Weighted cross entropy. The probabilities for each pixel are weighted according to
