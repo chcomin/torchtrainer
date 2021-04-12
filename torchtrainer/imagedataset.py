@@ -3,13 +3,13 @@ Dataset storage class
 '''
 
 from pathlib import Path
-from PIL import Image
 import random
-from torch.utils.data import dataset as torch_dataset
-from torch.utils.data import dataloader as torch_dataloader
-import torch
 import bisect
 import copy
+from PIL import Image
+import torch
+from torch.utils.data import dataset as torch_dataset
+from torch.utils.data import dataloader as torch_dataloader
 from .transforms import TransfToTensor, TransfToPil
 
 class ImageDataset(torch_dataset.Dataset):

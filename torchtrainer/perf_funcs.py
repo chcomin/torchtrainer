@@ -1,10 +1,10 @@
 '''Functions for measuring the performance of a classifier.'''
 
-import scipy.ndimage as ndi
 from functools import partial
-import torch.nn.functional as F
-import torch
+import scipy.ndimage as ndi
 import numpy as np
+import torch
+import torch.nn.functional as F
 
 def iou(input, target, ignore_index=None):
     '''Calculate intersection over union for predicted probabilities. Assumes background has

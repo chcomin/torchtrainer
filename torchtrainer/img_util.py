@@ -4,9 +4,9 @@ Utilities for working with PIL, tensor, numpy and imgaug images
 
 from PIL import Image
 import torch
-from IPython.display import display
-import matplotlib.pyplot as plt
 import random
+import matplotlib.pyplot as plt
+from IPython.display import display
 from ipywidgets import interact, fixed, IntSlider
 
 def pil_img_info(img, print_repr=False):

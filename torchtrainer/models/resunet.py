@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch import tensor
 from .layers import ResBlock, Concat, Blur
-from torchtrainer.module_util import ActivationSampler
+from ..module_util import ActivationSampler
 
 class Encoder(nn.Module):
 

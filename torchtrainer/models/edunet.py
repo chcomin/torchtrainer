@@ -4,12 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
-
-# For importing in both the notebook and in the .py file
-try:
-    import ActivationSampler
-except ImportError:
-    from torchtrainer.module_util import ActivationSampler
+from ..module_util import ActivationSampler
 
 class DoubleConvolution(nn.Module):
     def __init__(self, in_channels, middle_channel, out_channels, kernel_size=3, p=1):

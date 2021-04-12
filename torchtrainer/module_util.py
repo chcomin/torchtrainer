@@ -1,7 +1,7 @@
 '''Utility functions and classes for working with Pytorch modules'''
 
-from torch import nn
 from functools import partial
+from torch import nn
 
 class ActivationSampler(nn.Module):
     '''Generates a hook for sampling a layer activation. Can be used as
