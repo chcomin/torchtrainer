@@ -6,6 +6,7 @@ from torch import nn
 from torch import tensor
 from .layers import ResBlock, Concat, Blur
 from ..module_util import ActivationSampler
+from collections import OrderedDict
 
 class Encoder(nn.Module):
 
@@ -103,9 +104,86 @@ class ResUNet(nn.Module):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
 
-    def get_shapes(self, img_shape):
+class FlexibleEncoder(nn.Module):
 
-        input_img = torch.zeros(img_shape)[None, None]
-        input_img = input_img.to(next(self.parameters()).device)
-        output = self(input_img)
-        return output[0, 0].shape
+    def __init__(self, num_channels, layers, first_kernel_size=7):
+        """Encoder part of FlexibleResUNet"""
+
+        super(FlexibleEncoder, self).__init__()
+
+        self.input_conv = nn.Sequential(
+                nn.Conv2d(num_channels, layers[0], kernel_size=first_kernel_size, stride=1, padding=(first_kernel_size-1)//2, bias=False),
+                nn.BatchNorm2d(layers[0]),
+                nn.ReLU(inplace=True)
+        )
+
+        if len(layers)>1:
+            self.initial_block = ResBlock(layers[0], layers[1], stride=1)
+        for layer_idx in range(1, len(layers)-1):
+            setattr(self, f'down_{layer_idx}', ResBlock(layers[layer_idx], layers[layer_idx+1], stride=2))
+
+    def forward(self, x):
+        for layer in self.children(): x = layer(x)
+        return x
+
+class FlexibleResUNet(nn.Module):
+
+    def __init__(self, num_channels, num_classes, layers=(64, 64, 128, 256, 512, 1024), use_blur=True):
+        """U-Net with residual blocks that adapts the number of layers and number of filters
+        according to parameter `layers`. The first two values of `layers` set the number
+        of filters of an initial Conv2d and an initial residual block. The remaining values
+        set the number of filters at each downsample operation. Consequently, it also sets
+        the number of filters at each upsample operation. Thus, the number of downsamples
+        is equal to len(layers)-2."""
+
+        super(FlexibleResUNet, self).__init__()
+        self.layers = layers
+        self.use_blur = use_blur
+
+        self.encoder = Encoder(num_channels, layers)
+        for layer_idx in range(len(layers)-1, 1, -1):
+            upsample_block = OrderedDict()
+            upsample_block[f'upsample'] = nn.ConvTranspose2d(layers[layer_idx], layers[layer_idx-1], kernel_size=2, stride=2)
+            if use_blur:
+                upsample_block[f'blur'] = Blur()
+            if layer_idx==2:
+                upsample_block['sample_initial_block_act'] = ActivationSampler(getattr(self.encoder, f'initial_block'))
+            else:
+                upsample_block[f'sample_down_{layer_idx-2}_act'] = ActivationSampler(getattr(self.encoder, f'down_{layer_idx-2}'))
+            upsample_block[f'concat'] = Concat(1)
+            upsample_block[f'squeeze_channels'] = ResBlock(layers[layer_idx], layers[layer_idx-1], stride=1)
+            setattr(self, f'up_{layer_idx-1}', nn.Sequential(upsample_block))
+
+        self.final = nn.Conv2d(64, num_classes, kernel_size=1)
+        self.reset_parameters()
+
+    def forward(self, x):
+
+        layers = self.layers
+        
+        x = self.encoder(x)
+        for layer_idx in range(len(layers)-1, 1, -1):
+            upsample_block = getattr(self, f'up_{layer_idx-1}')
+            x = upsample_block.upsample(x)
+            if self.use_blur:
+                x = upsample_block.blur(x)
+            if layer_idx==2:
+                act = upsample_block.sample_initial_block_act()
+            else:
+                act = getattr(upsample_block, f'sample_down_{layer_idx-2}_act')()
+            x = upsample_block.concat(act, x)
+            x = upsample_block.squeeze_channels(x)
+        x = self.final(x)
+
+        return x
+
+    def reset_parameters(self):
+
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.kaiming_normal_(module.weight)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, nn.BatchNorm2d):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()

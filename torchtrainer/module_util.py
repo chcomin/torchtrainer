@@ -211,3 +211,10 @@ def unfreeze(module_groups):
     '''Unfreezes the entire model.'''
 
     groups_requires_grad(module_groups, True)
+
+def get_output_shape(self, model, img_shape):
+
+    input_img = torch.zeros(img_shape)[None, None]
+    input_img = input_img.to(next(model.parameters()).device)
+    output = model(input_img)
+    return output[0, 0].shape
