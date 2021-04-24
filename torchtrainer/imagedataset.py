@@ -106,6 +106,41 @@ class ImageDataset(torch_dataset.Dataset):
 
         return img_transf, label
 
+    def get_item(self, idx, transforms=None):
+        """Same behavior as self.__getitem__() but does not apply transformation functions. Custom
+        transformation functions can be passed as an optional parameter.
+        
+        Parameters
+        ----------
+        idx : int
+            Index of the image
+        transforms : list of callable
+            List of functions to be applied for image augmentation. See the class docstring for a description.
+
+        Returns
+        -------
+        img_transf : ImageLike
+        label : ImageLike
+        """
+
+        if transforms is None:
+            transforms = []
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label = self.name_to_label_map(img_file_path.name)
+
+        img_transf = self.apply_transforms(transforms, img)
+
+        # Hack for fastai
+        #if isinstance(img_transf, torch.Tensor):
+        #    img_transf.size = TensorShape(img_transf.shape[1:])
+        if not isinstance(label, torch.Tensor):
+            label = torch.tensor(label)
+
+        return img_transf, label
+
     def __len__(self):
 
         return len(self.img_file_paths)
@@ -320,41 +355,6 @@ class ImageDataset(torch_dataset.Dataset):
                     img = transform(img)
         return img
 
-    def get_item(self, idx, transforms=None):
-        """Same behavior as self.__getitem__() but does not apply transformation functions. Custom
-        transformation functions can be passed as an optional parameter.
-        
-        Parameters
-        ----------
-        idx : int
-            Index of the image
-        transforms : list of callable
-            List of functions to be applied for image augmentation. See the class docstring for a description.
-
-        Returns
-        -------
-        img_transf : ImageLike
-        label : ImageLike
-        """
-
-        if transforms is None:
-            transforms = []
-
-        img_file_path = self.img_file_paths[idx]
-
-        img = self.img_opener(img_file_path)
-        label = self.name_to_label_map(img_file_path.name)
-
-        img_transf = self.apply_transforms(transforms, img)
-
-        # Hack for fastai
-        #if isinstance(img_transf, torch.Tensor):
-        #    img_transf.size = TensorShape(img_transf.shape[1:])
-        if not isinstance(label, torch.Tensor):
-            label = torch.tensor(label)
-
-        return img_transf, label
-
     def set_apply_transform(self, apply_transform):
         """Set the self.apply_transform attribute. 
         
@@ -478,6 +478,48 @@ class ImageSegmentationDataset(ImageDataset):
 
         return item_transf
 
+    def get_item(self, idx, transforms=None):
+        """Same behavior as self.__getitem__() but does not apply transformation functions. Custom
+        transformation functions can be passed as an optional parameter.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the image
+        transforms : list of callable
+            List of functions to be applied for image augmentation. See the class docstring for a description.
+
+        Returns
+        -------
+        item_transf : tuple of ImageLike
+        """
+
+        if transforms is None:
+            transforms = []
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label_file_path = self.label_path_from_image_path(img_file_path)
+        label = self.label_opener(label_file_path)
+
+        item = [img, label]
+        if self.weight_func is not None:
+            weight = self.weight_func(img, label, img_file_path)
+            item.append(weight)
+        
+        item_transf = self.apply_transforms(transforms, *item)
+
+        # Hack for fastai
+        #for r in item_transf:
+        #    if isinstance(r, torch.Tensor):
+        #        r.size = TensorShape(r.shape[1:])
+
+        if isinstance(item_transf[1], torch.Tensor):
+            item_transf[1] = item_transf[1].long().squeeze()
+
+        return item_transf
+
     def subset(self, filename_filter):
         """Return a new ImageSegmentationDataset containing only images for which filename_filter(img_filename) is True.
         
@@ -537,48 +579,6 @@ class ImageSegmentationDataset(ImageDataset):
             for transform in transforms:
                     item = transform(*item)
         return item
-
-    def get_item(self, idx, transforms=None):
-        """Same behavior as self.__getitem__() but does not apply transformation functions. Custom
-        transformation functions can be passed as an optional parameter.
-
-        Parameters
-        ----------
-        idx : int
-            Index of the image
-        transforms : list of callable
-            List of functions to be applied for image augmentation. See the class docstring for a description.
-
-        Returns
-        -------
-        item_transf : tuple of ImageLike
-        """
-
-        if transforms is None:
-            transforms = []
-
-        img_file_path = self.img_file_paths[idx]
-
-        img = self.img_opener(img_file_path)
-        label_file_path = self.label_path_from_image_path(img_file_path)
-        label = self.label_opener(label_file_path)
-
-        item = [img, label]
-        if self.weight_func is not None:
-            weight = self.weight_func(img, label, img_file_path)
-            item.append(weight)
-        
-        item_transf = self.apply_transforms(transforms, *item)
-
-        # Hack for fastai
-        #for r in item_transf:
-        #    if isinstance(r, torch.Tensor):
-        #        r.size = TensorShape(r.shape[1:])
-
-        if isinstance(item_transf[1], torch.Tensor):
-            item_transf[1] = item_transf[1].long().squeeze()
-
-        return item_transf
 
     def load_on_memory(self):
         """Load all images on memory."""
@@ -659,7 +659,8 @@ class ImagePatchDataset(ImageDataset):
     def __init__(self, patch_shape, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
                  transforms=None, stride=None, img_shape=None, is_3d=False, patch_transforms=None, cache_size=0):
 
-        super().__init__(img_dir, name_to_label_map, filename_filter=None, img_opener=None, transforms=None, cache_size=0)
+        super().__init__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener, 
+                         transforms=transforms, cache_size=cache_size)
 
         if stride is None:
             stride = patch_shape
@@ -684,7 +685,7 @@ class ImagePatchDataset(ImageDataset):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        img_patch, label = self.getitem(idx)
+        img_patch, label = self.get_patch_item(idx)
 
         if self.apply_transform == True:
             img_transf = self.apply_transforms(self.patch_transforms, img_patch)
@@ -693,7 +694,7 @@ class ImagePatchDataset(ImageDataset):
 
         return img_transf, label
 
-    def getitem(self, idx, img_idx=None, transforms=None):
+    def get_patch_item(self, idx, img_idx=None, transforms=None):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
@@ -717,7 +718,7 @@ class ImagePatchDataset(ImageDataset):
         return img_transf, label
 
     def get_img_item(self, idx):
-
+        
         return super().__getitem__(idx)
 
     def __len__(self):
@@ -732,6 +733,35 @@ class ImagePatchDataset(ImageDataset):
                               img_opener=self.img_opener, transforms=transforms, cache_size=cache_size,
                               stride=self.stride, img_shape=self.img_shape, is_3d=self.is_3d, patch_transforms=patch_transforms)
 
+    def generate_patches_corners_for_dataset(self, patch_shape, stride, is_3d, img_shape=None):
+        '''If img_shape is None, generates indices by opening each image to get the
+        respective shape. This is useful when images have distinct sizes. If img_shape
+        is not None, uses that shape and the images are not opened, which is much faster.'''
+
+        if img_shape is None:
+            must_open = True
+        else:
+            must_open = False
+
+        patches_corners = []
+        patches_location = []
+        for img_idx, img_file_path in enumerate(self.img_file_paths):
+            if must_open:
+                try:
+                    img, _ = super().__getitem__(img_idx)
+                except Exception:
+                    raise Exception(f'Cannot get image {img_file_path}\n')
+                # Instantiate class in order to disconsider channel information when getting the shape
+                img_shape = PatchedImage(img, patch_shape, stride, is_3d=is_3d).img_shape
+
+            patches_corners_img = PatchedImage.generate_patches_corners_for_image(img_shape, patch_shape, stride)
+            num_patches = len(patches_corners)
+            location = slice(num_patches, num_patches+len(patches_corners_img))
+            patches_corners.extend(zip([img_idx]*len(patches_corners_img), patches_corners_img))
+            patches_location.append(location)
+
+        return patches_corners, patches_location
+
 class ImagePatchSegmentationDataset(ImageSegmentationDataset):
     """Patchwise image dataset storage."""
 
@@ -739,8 +769,8 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
                  label_opener=None, transforms=None, stride=None, img_shape=None, is_3d=False, patch_transforms=None,
                  weight_func=None, cache_size=0):
 
-        super().__init__(img_dir, label_dir, name_to_label_map, filename_filter=None, img_opener=None, 
-                         label_opener=None, transforms=None, weight_func=None, cache_size=0)
+        super().__init__(img_dir, label_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener, 
+                         label_opener=label_opener, transforms=transforms, weight_func=weight_func, cache_size=cache_size)
 
         if stride is None:
             stride = patch_shape
@@ -757,8 +787,6 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         self.img_shape = img_shape
         self.is_3d = is_3d
         self.patch_transforms = patch_transforms
-        self.patches_corners = []
-        self.patches_location = []
 
         patches = generate_patches_corners_for_dataset(self, patch_shape, stride, is_3d, img_shape=img_shape)
         self.patches_corners, self.patches_location = patches
@@ -767,16 +795,19 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        item = self.getitem(idx)
+        item = self.get_patch_item(idx)
 
         if self.apply_transform == True:
             item_transf = self.apply_transforms(self.patch_transforms, *item)
         else:
             item_transf = item
 
+        if isinstance(item_transf[1], torch.Tensor):
+            item_transf[1] = item_transf[1].long().squeeze()
+
         return item_transf
 
-    def getitem(self, idx, img_idx=None, transforms=None):
+    def get_patch_item(self, idx, img_idx=None, transforms=None):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
@@ -798,6 +829,9 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
             item_transf = self.apply_transforms(self.patch_transforms, *item_patch)
         else:
             item_transf = item
+
+        if isinstance(item_transf[1], torch.Tensor):
+            item_transf[1] = item_transf[1].long().squeeze()
 
         return item_transf
 

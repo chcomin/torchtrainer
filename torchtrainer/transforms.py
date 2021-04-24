@@ -502,6 +502,8 @@ def numpy_to_imgaug(img, is_label=False, is_weight=False, img_shape=None):
         img_shape = img.shape
 
     if is_label:
+        if img.dtype!='uint8':
+            img = img.astype(np.uint8)
         return ia.SegmentationMapsOnImage(img, img_shape)
     elif is_weight:
         return ia.HeatmapsOnImage(img, img_shape)
