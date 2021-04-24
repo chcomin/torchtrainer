@@ -142,6 +142,51 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
 
     return img
 
+
+def get_shape(img, warn=True):
+    """Get the shape of a ndarray, PIL or tensor image. Works for 2D and 3D images. Warning, for 
+    three-dimensional arrays, the function guesses if the image is 2D with colors or 3D grayscale.
+    The following is assumed:
+
+    -For tensors:
+        - If img[-3]<=4, the image is 2D with colors
+        - If img[-3]>4, the image is 3D
+    -For numpy arrays:
+        - If img[-1]<=4, the image is 2D with colors
+        - If img[-1]>4, the image is 3D
+    """
+
+    if isinstance(img, Image.Image):
+        img_shape = (img.height, img.width)
+    elif isinstance(img, torch.Tensor):
+        img_shape = img.shape
+        if (img.ndim==3):
+            if img_shape[-3]<=4:
+                # Consider that third to last dimension is for color
+                img_shape = img_shape[-2:]
+            else:
+                img_shape = img_shape[-3:]
+        if (img.ndim==4):
+            img_shape = img_shape[-3:]
+    elif isinstance(img, np.ndarray):
+        img_shape = img.shape
+        if img.ndim==3:
+            if img_shape[-1]<=4:
+                # Consider that last dimension is for color
+                img_shape = img_shape[-3:-1]
+            else:
+                img_shape = img_shape[-3:]
+        elif img.ndim==4:
+            img_shape = img_shape[-3:]
+    else:
+        raise AttributeError("Image is not a PIL, Tensor or ndarray. Cannot safely infer shape")
+
+    if min(img_shape)<=4:
+        print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 5 are being discarded')
+        img_shape = filter(lambda v:v>4, img_shape)
+
+    return img_shape
+
 class PerfVisualizer:
     """Class for visualizing classification results in increasing order of the values returned by `perf_func`"""
 

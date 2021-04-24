@@ -62,7 +62,6 @@ class ResBlock(nn.Module):
 
 
 class SimpleNet(nn.Module):
-    '''Encoder part of U-Net'''
 
     def __init__(self, num_channels, num_classes):
         super(SimpleNet, self).__init__()
@@ -101,7 +100,6 @@ class SimpleNet(nn.Module):
         return output[0, 0].shape
 
 class SimpleNet2(nn.Module):
-    '''Encoder part of U-Net'''
 
     def __init__(self, num_channels, num_classes):
         super(SimpleNet2, self).__init__()
