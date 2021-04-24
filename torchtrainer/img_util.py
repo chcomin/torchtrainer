@@ -8,6 +8,7 @@ import random
 import matplotlib.pyplot as plt
 from IPython.display import display
 from ipywidgets import interact, fixed, IntSlider
+from .transforms import pil_to_tensor
 
 def pil_img_info(img, print_repr=False):
     """Return the following information about a PIL image:
@@ -139,6 +140,8 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
         for i, c in enumerate(colors):
             lut[c]=i
         img = img.point(lut)
+
+    img = pil_to_tensor(img)
 
     return img
 

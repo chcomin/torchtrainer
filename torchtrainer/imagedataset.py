@@ -13,6 +13,7 @@ from torch.utils.data import dataset as torch_dataset
 from torch.utils.data import dataloader as torch_dataloader
 from .transforms import TransfToTensor, TransfToPil, TransfToNumpy
 from .img_util import get_shape
+from .util import save_params
 
 class ImageDataset(torch_dataset.Dataset):
     """Image dataset storage class.
@@ -47,6 +48,9 @@ class ImageDataset(torch_dataset.Dataset):
         If True, all images will be read on memory. If False, images are read from the disk when requested.
     """
 
+    init_params = {}
+
+    @save_params(init_params)
     def __init__(self, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
                  transforms=None, cache_size=0):
 
@@ -85,12 +89,13 @@ class ImageDataset(torch_dataset.Dataset):
     def __getitem__(self, idx):
 
         if self.cache_manager is None:
-            img, label = self.get_item(idx)
+            # Do not use `self` to avoid subclasses calling their own get_item
+            img, label = ImageDataset.get_item(self, idx)
         else:
             if idx in self.cache_manager:
                 img, label = self.cache_manager[idx]
             else:
-                img, label = self.get_item(idx)
+                img, label = ImageDataset.get_item(self, idx)
                 self.cache_manager[idx] = (img, label)
 
         if self.apply_transform == True:
@@ -167,10 +172,14 @@ class ImageDataset(torch_dataset.Dataset):
             The new dataset.
         """
 
-        transforms = copy.copy(self.transforms)
-        cache_size = 0 if self.cache_manager is None else self.cache_manager.max_size
-        return self.__class__(self.img_dir, self.name_to_label_map, filename_filter=filename_filter, img_opener=self.img_opener,
-                              transforms=transforms, cache_size=cache_size)
+        #transforms = copy.copy(self.transforms)
+        #cache_size = 0 if self.cache_manager is None else self.cache_manager.max_size
+        #return self.__class__(self.img_dir, self.name_to_label_map, filename_filter=filename_filter, img_opener=self.img_opener,
+        #                      transforms=transforms, cache_size=cache_size)
+        init_params = copy.deepcopy(self.init_params)
+        del init_params['self']
+        init_params['filename_filter'] = filename_filter
+        return self.__class__(**init_params)
 
     def set_transforms(self, transforms):
         """Set the data augmentation transformation functions. 
@@ -455,14 +464,15 @@ class ImageSegmentationDataset(ImageDataset):
         not defined during class instantiation or an aditional weight image otherwise.'''
 
         if self.cache_manager is None:
-            item = self.get_item(idx)
+            # Do not use `self` to avoid subclasses calling their own get_item
+            item = ImageSegmentationDataset.get_item(self, idx)
         else:
             if idx in self.cache_manager:
                 item = self.cache_manager[idx]
             else:
-                item = self.get_item(idx)
+                item = ImageSegmentationDataset.get_item(self, idx)
                 self.cache_manager[idx] = item
-
+    
         if self.apply_transform:
             item_transf = self.apply_transforms(self.transforms, *item)
         else:
@@ -475,7 +485,7 @@ class ImageSegmentationDataset(ImageDataset):
 
         if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()  # Label image
-
+        
         return item_transf
 
     def get_item(self, idx, transforms=None):
@@ -657,7 +667,7 @@ class ImagePatchDataset(ImageDataset):
     """Patchwise image dataset storage."""
 
     def __init__(self, patch_shape, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 transforms=None, stride=None, img_shape=None, is_3d=False, patch_transforms=None, cache_size=0):
+                 transforms=None, stride=None, img_shape=None, patch_transforms=None, cache_size=0):
 
         super().__init__(img_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener, 
                          transforms=transforms, cache_size=cache_size)
@@ -672,6 +682,11 @@ class ImagePatchDataset(ImageDataset):
         if len(patch_shape)!=len(stride):
             raise ValueError('`patch_shape` and `stride` must have same length')
 
+        if len(patch_shape)==3:
+            is_3d = True
+        else:
+            is_3d = False
+
         self.patch_shape = patch_shape
         self.stride = stride
         self.img_shape = img_shape
@@ -681,11 +696,11 @@ class ImagePatchDataset(ImageDataset):
         patches = generate_patches_corners_for_dataset(self, patch_shape, stride, is_3d, img_shape=img_shape)
         self.patches_corners, self.patches_location = patches
 
-    def __getitem__(self, idx, img_idx=None):
+    def __getitem__(self, idx):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        img_patch, label = self.get_patch_item(idx)
+        img_patch, label = self.get_item(idx)
 
         if self.apply_transform == True:
             img_transf = self.apply_transforms(self.patch_transforms, img_patch)
@@ -694,7 +709,7 @@ class ImagePatchDataset(ImageDataset):
 
         return img_transf, label
 
-    def get_patch_item(self, idx, img_idx=None, transforms=None):
+    def get_item(self, idx, img_idx=None, transforms=None):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
@@ -710,10 +725,7 @@ class ImagePatchDataset(ImageDataset):
         img, label = self.get_img_item(img_idx)
         img_patch = img[(...,)+patch_corners]
 
-        if self.apply_transform == True:
-            img_transf = self.apply_transforms(self.patch_transforms, img_patch)
-        else:
-            img_transf = img
+        img_transf = self.apply_transforms(transforms, img_patch)
 
         return img_transf, label
 
@@ -766,7 +778,7 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
     """Patchwise image dataset storage."""
 
     def __init__(self, patch_shape, img_dir, label_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 label_opener=None, transforms=None, stride=None, img_shape=None, is_3d=False, patch_transforms=None,
+                 label_opener=None, transforms=None, stride=None, img_shape=None, patch_transforms=None,
                  weight_func=None, cache_size=0):
 
         super().__init__(img_dir, label_dir, name_to_label_map, filename_filter=filename_filter, img_opener=img_opener, 
@@ -782,6 +794,11 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         if len(patch_shape)!=len(stride):
             raise ValueError('`patch_shape` and `stride` must have same length')
 
+        if len(patch_shape)==3:
+            is_3d = True
+        else:
+            is_3d = False
+
         self.patch_shape = patch_shape
         self.stride = stride
         self.img_shape = img_shape
@@ -795,7 +812,7 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
-        item = self.get_patch_item(idx)
+        item = self.get_item(idx)
 
         if self.apply_transform == True:
             item_transf = self.apply_transforms(self.patch_transforms, *item)
@@ -804,10 +821,10 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
 
         if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()
-
+        
         return item_transf
 
-    def get_patch_item(self, idx, img_idx=None, transforms=None):
+    def get_item(self, idx, img_idx=None, transforms=None):
         '''Returns one item from the dataset. Will return an image and label if weight_func was
         not defined during class instantiation or an aditional weight image otherwise.'''
 
@@ -819,16 +836,14 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
 
         if transforms is None:
             transforms = []    
-
+        
         item = self.get_img_item(img_idx)
+        
         item_patch = []
         for value in item:
             item_patch.append(value[(...,)+patch_corners])
 
-        if self.apply_transform == True:
-            item_transf = self.apply_transforms(self.patch_transforms, *item_patch)
-        else:
-            item_transf = item
+        item_transf = self.apply_transforms(transforms, *item_patch)
 
         if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()
@@ -836,7 +851,7 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         return item_transf
 
     def get_img_item(self, idx):
-
+        
         return super().__getitem__(idx)
 
     def __len__(self):
