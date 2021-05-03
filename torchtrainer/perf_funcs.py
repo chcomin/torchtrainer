@@ -332,6 +332,7 @@ def focal_loss(probs, target, alpha, gamma, reduction='mean'):
     return loss
 
 class DiceLossRaw(torch.nn.Module):
+    """input must be logits."""
     
     def __init__(self, squared=False, eps=1e-8):
         super().__init__()
@@ -345,6 +346,7 @@ class DiceLossRaw(torch.nn.Module):
         return dice_loss(probs, target, self.squared, self.eps)
     
 class DiceLoss(torch.nn.Module):
+    """input must be probabilities."""
     
     def __init__(self, squared=False, eps=1e-8):
         super().__init__()
@@ -367,6 +369,49 @@ def dice_loss(input, target, squared=False, eps=1e-8):
     denominator = torch.sum(input_1) + torch.sum(target)
 
     return 1 - (numerator + eps)/(denominator + eps)    
+
+class LabelSmoothingLoss(torch.nn.Module):
+    def __init__(self, num_classes, smoothing=0.0, weight=None, reduction='mean'):
+        """Adapted from https://github.com/pytorch/pytorch/issues/7455#issuecomment-513062631
+        if smoothing == 0, it's one-hot method
+           if 0 < smoothing < 1, it's smooth method
+
+        input should be logits
+        """
+        super().__init__()
+        self.num_classes = num_classes
+        self.smoothing = smoothing
+        self.weight = weight
+        self.reduction = reduction
+
+        self.confidence = 1.0 - smoothing      
+        self.dim = 1      # Channel dimension
+
+    def reduce_loss(self, loss_per_item):
+
+        if self.reduction == 'mean':
+            loss = loss_per_item.mean() 
+        elif self.reduction == 'sum':
+            loss = loss_per_item.sum() 
+
+        return loss
+
+    def forward(self, pred, target):
+
+        assert 0 <= self.smoothing < 1
+        pred = pred.log_softmax(dim=self.dim)
+
+        if self.weight is not None:
+            view_shape = (1,)*(pred.ndim-2)
+            pred = pred * self.weight.view(1, -1, *view_shape)
+
+        with torch.no_grad():
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(self.smoothing / (self.num_classes - 1))
+            true_dist.scatter_(self.dim, target.data.unsqueeze(1), self.confidence)
+        loss_per_item = -torch.sum(true_dist * pred, dim=self.dim)
+
+        return self.reduce_loss(loss_per_item)
 
 class CocoPerf:
     """Not the same as COCO, since detection scores are not considered."""

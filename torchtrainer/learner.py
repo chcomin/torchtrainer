@@ -366,6 +366,22 @@ class Learner:
         self.best_score = checkpoint['best_score']
         self.checkpoint = checkpoint
 
+    def save_model_dict(self, filename='model.pt'):
+        """Save the parameters of the model."""
+        torch.save(self.model.state_dict(), filename)
+
+    def load_model_dict(self, filename='model.pt'):
+        """Load the parameters of the model."""
+        self.model.load_state_dict(torch.load(filename))
+
+    def save_model(self, filename='model.pickle'):
+        """Save the model as a pickle file."""
+        torch.save(filename)
+
+    def load_model(self, filename='model.pickle'):
+        """Load a model from a pickle file."""
+        self.model = torch.load(filename)
+
     def save_history(self, filename, sep=';'):
         """Save the loss and performance metrics history to a file."""
 

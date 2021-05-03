@@ -221,8 +221,9 @@ class TransfWhitten(Transform):
         self.std = std
 
     def apply_img(self, img):
-
-        img_norm = (img - self.mean.view(-1, 1, 1))/self.std.view(-1, 1, 1)
+        
+        view_shape = (1,)*(img.ndim-2)
+        img_norm = (img - self.mean.view(-1, *view_shape))/self.std.view(-1, *view_shape)
         return img_norm
 
 class TransfUnwhitten(Transform):
@@ -379,12 +380,16 @@ class Compose:
 
     def __call__(self, img=None, label=None, weight=None):
 
-        item = [img, label, weight]
+        item = {}
+        for elem in zip(('img', 'label', 'weight'), [img, label, weight]):
+            if elem[1] is not None:
+                item[elem[0]] = elem[1]
+            
         for transform in self.transforms:
-            if isinstance(item, (list, tuple)):
-                item = transform(*item)
-            else:
-                item = transform(item)
+            item_transf = transform(**item)
+            for idx, img_type in enumerate(item):
+                item[img_type] = item_transf[idx]
+
         return item
 
 """ The transformations below are aimed at conversions between library formats. Libraries 
@@ -529,7 +534,7 @@ def tensor_to_numpy(img, unormalize=False, is_3d=False):
         npimg = npimg.transpose((1, 2, 3, 0))
 
     if npimg.shape[-1]==1:
-        npimg = npimg[0]
+        npimg = npimg[...,0]
 
     return npimg
 

@@ -293,11 +293,11 @@ class PerfVisualizer:
                 img_show = img
                 label_show = label
             else:
-                if img_transf.ndim==3:
-                    img_show = img_transf.permute(1, 2, 0)
-                else:
-                    img_show = img_transf
+                img_show = img_transf
                 label_show = label_transf
+
+            if img_transf.ndim==3:
+                img_show = img_show.permute(1, 2, 0)
 
             plt.subplot(num_samples, 3, 3*idx+1)
             plt.imshow(img_show, 'gray')
