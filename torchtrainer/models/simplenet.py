@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
+from .layers import ResBlock
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -14,52 +15,6 @@ def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
 def conv1x1(in_planes, out_planes, stride=1):
     """1x1 convolution"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
-
-
-class ResBlock(nn.Module):
-
-    def __init__(self, inplanes, planes, stride=1, norm_layer=None):
-        super(ResBlock, self).__init__()
-        if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
-        self.stride = stride
-
-        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
-        self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = norm_layer(planes)
-
-        if (inplanes!=planes) or (stride>1):
-            # If in and out planes are different, we also need to change the planes of the input
-            # If stride is not 1, we need to change the size of the input
-            reshape_input = nn.Sequential(
-                                    conv1x1(inplanes, planes, stride),
-                                    norm_layer(planes),
-                            )
-            self.reshape_input = reshape_input
-        else:
-            self.reshape_input = None
-
-    def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.reshape_input is not None:
-            identity = self.reshape_input(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
 
 class SimpleNet(nn.Module):
 
@@ -133,6 +88,49 @@ class SimpleNet2(nn.Module):
     def get_shapes(self, img_shape):
 
         input_img = torch.zeros(img_shape)[None, None]
-        input_img = input_img.to(next(model.parameters()).device)
+        input_img = input_img.to(next(self.parameters()).device)
+        output = self(input_img)
+        return output[0, 0].shape
+
+class FlexibleSimpleNet(nn.Module):
+
+    def __init__(self, num_channels, num_classes, layers=[8, 16, 32, 64], input_conv=True):
+        super().__init__()
+
+        if input_conv:
+            channels_first_layer = layers[0]
+            self.input_conv = nn.Conv2d(num_channels, layers[0], kernel_size=7, stride=1, padding=3, bias=False)
+            self.input_conv_bn = nn.BatchNorm2d(layers[0])
+            self.input_conv_relu = nn.ReLU(inplace=True)
+        else:
+            channels_first_layer = num_channels
+
+        channels_prev_layer = channels_first_layer
+        for idx, channels_curr_layer in enumerate(layers):
+            setattr(self, f'resblock{idx+1}', ResBlock(channels_prev_layer, channels_curr_layer, stride=1))
+            channels_prev_layer = channels_curr_layer
+            
+        self.output_conv = nn.Conv2d(layers[-1], num_classes, kernel_size=1)
+        self.reset_parameters()
+
+    def forward(self, x):
+        for layer in self.children(): x = layer(x)
+        return x
+
+    def reset_parameters(self):
+
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.kaiming_normal_(module.weight)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, nn.BatchNorm2d):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
+
+    def get_shapes(self, img_shape):
+
+        input_img = torch.zeros(img_shape)[None, None]
+        input_img = input_img.to(next(self.parameters()).device)
         output = self(input_img)
         return output[0, 0].shape

@@ -68,7 +68,7 @@ class Learner:
 
         
         if scheduler is None:
-            LambdaLR(optimizer, lambda x: 1)  # Fixed learning rate
+            scheduler = LambdaLR(optimizer, lambda x: 1)  # Fixed learning rate
         if perf_funcs is None:
             perf_funcs = {}
         if callbacks is None:
@@ -85,7 +85,7 @@ class Learner:
         self.train_dl = train_dl
         self.valid_dl = valid_dl
         self.scheduler = scheduler
-        self.scheduler_init_state = scheduler.state_dict()
+        self.scheduler_init_state = scheduler
         self.perf_funcs = perf_funcs
         self.main_perf_func = main_perf_func
         self.checkpoint_file = checkpoint_file
