@@ -151,10 +151,13 @@ class Learner:
         self.model.train()
         train_loss = 0.
         for item_collection in self.train_dl:
+            #print(f'a: {torch.cuda.memory_allocated(device=self.device)/1024**3}')
             loss, _, _ = self._apply_model_to_batch(*item_collection)
+            #print(f'b: {torch.cuda.memory_allocated(device=self.device)/1024**3}')
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            #print(f'c: {torch.cuda.memory_allocated(device=self.device)/1024**3}')
 
             if (self.scheduler is not None) and (not self.scheduler_step_epoch):
                 self.lr_history.append(self.scheduler.get_last_lr())
