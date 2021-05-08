@@ -28,7 +28,6 @@ class ResBlock(nn.Module):
         super(ResBlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
-        self.stride = stride
 
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
@@ -36,6 +35,7 @@ class ResBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3(planes, planes)
         self.bn2 = norm_layer(planes)
+        self.stride = stride
 
         if (inplanes!=planes) or (stride>1):
             # If in and out planes are different, we also need to change the planes of the input
@@ -65,6 +65,24 @@ class ResBlock(nn.Module):
         out = self.relu(out)
 
         return out
+
+class SE_Block(nn.Module):
+    "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
+    def __init__(self, c, r=16):
+        super().__init__()
+        self.squeeze = nn.AdaptiveAvgPool2d(1)
+        self.excitation = nn.Sequential(
+            nn.Linear(c, c // r, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(c // r, c, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        bs, c, _, _ = x.shape
+        y = self.squeeze(x).view(bs, c)
+        y = self.excitation(y).view(bs, c, 1, 1)
+        return x * y.expand_as(x)
 
 class Concat(nn.Module):
     '''Module for concatenating two activations using interpolation'''

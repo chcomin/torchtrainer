@@ -7,6 +7,7 @@ from torch import tensor
 from .layers import ResBlock, Concat, Blur
 from ..module_util import ActivationSampler
 from collections import OrderedDict
+from ..module_util import get_submodule
 
 class Encoder(nn.Module):
 
@@ -120,7 +121,7 @@ class FlexibleEncoder(nn.Module):
         if len(layers)>1:
             self.initial_block = ResBlock(layers[0], layers[1], stride=1)
         for layer_idx in range(1, len(layers)-1):
-            setattr(self, f'down_{layer_idx}', ResBlock(layers[layer_idx], layers[layer_idx+1], stride=2))
+            self.add_module(f'down_{layer_idx}', ResBlock(layers[layer_idx], layers[layer_idx+1], stride=2))
 
     def forward(self, x):
         for layer in self.children(): x = layer(x)
@@ -136,25 +137,25 @@ class FlexibleResUNet(nn.Module):
         the number of filters at each upsample operation. Thus, the number of downsamples
         is equal to len(layers)-2."""
 
-        super(FlexibleResUNet, self).__init__()
+        super().__init__()
         self.layers = layers
         self.use_blur = use_blur
 
-        self.encoder = Encoder(num_channels, layers)
+        self.encoder = FlexibleEncoder(num_channels, layers)
         for layer_idx in range(len(layers)-1, 1, -1):
             upsample_block = OrderedDict()
             upsample_block[f'upsample'] = nn.ConvTranspose2d(layers[layer_idx], layers[layer_idx-1], kernel_size=2, stride=2)
             if use_blur:
                 upsample_block[f'blur'] = Blur()
             if layer_idx==2:
-                upsample_block['sample_initial_block_act'] = ActivationSampler(getattr(self.encoder, f'initial_block'))
+                upsample_block['sample_initial_block_act'] = ActivationSampler(get_submodule(self, "encoder.initial_block"))
             else:
-                upsample_block[f'sample_down_{layer_idx-2}_act'] = ActivationSampler(getattr(self.encoder, f'down_{layer_idx-2}'))
+                upsample_block[f'sample_down_{layer_idx-2}_act'] = ActivationSampler(get_submodule(self, f"encoder.down_{layer_idx-2}"))
             upsample_block[f'concat'] = Concat(1)
             upsample_block[f'squeeze_channels'] = ResBlock(layers[layer_idx], layers[layer_idx-1], stride=1)
-            setattr(self, f'up_{layer_idx-1}', nn.Sequential(upsample_block))
+            self.add_module(f'up_{layer_idx-1}', nn.Sequential(upsample_block))
 
-        self.final = nn.Conv2d(64, num_classes, kernel_size=1)
+        self.final = nn.Conv2d(layers[1], num_classes, kernel_size=1)
         self.reset_parameters()
 
     def forward(self, x):
@@ -163,14 +164,14 @@ class FlexibleResUNet(nn.Module):
         
         x = self.encoder(x)
         for layer_idx in range(len(layers)-1, 1, -1):
-            upsample_block = getattr(self, f'up_{layer_idx-1}')
+            upsample_block = get_submodule(self, f'up_{layer_idx-1}')
             x = upsample_block.upsample(x)
             if self.use_blur:
                 x = upsample_block.blur(x)
             if layer_idx==2:
                 act = upsample_block.sample_initial_block_act()
             else:
-                act = getattr(upsample_block, f'sample_down_{layer_idx-2}_act')()
+                act = get_submodule(upsample_block, f"sample_down_{layer_idx-2}_act")()
             x = upsample_block.concat(act, x)
             x = upsample_block.squeeze_channels(x)
         x = self.final(x)

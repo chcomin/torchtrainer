@@ -2,6 +2,9 @@
 
 from functools import partial
 from torch import nn
+from collections import OrderedDict
+
+bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
 class ActivationSampler(nn.Module):
     '''Generates a hook for sampling a layer activation. Can be used as
@@ -23,7 +26,7 @@ class ActivationSampler(nn.Module):
 
     def get_hook(self):
         def hook(model, input, output):
-            self.activation = output
+            self.activation = output.detach()
         return hook
 
     def extra_repr(self):
@@ -145,9 +148,6 @@ def calculate_stats(store_act=True, store_weights=False):
 
     return partial(_calculate_stats, store_act=store_act, store_weights=store_weights)
 
-
-bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
-
 def split_modules(model, modules_to_split):
     '''Split `model` layers into different groups. Useful for freezing part of the model
     or using different learning rates.'''
@@ -218,3 +218,73 @@ def get_output_shape(self, model, img_shape):
     input_img = input_img.to(next(model.parameters()).device)
     output = model(input_img)
     return output[0, 0].shape
+
+def get_submodule(model, module):
+    """Return a module inside `model`. Module should be a string of the form
+    'layer_name.sublayer_name'
+    """
+
+    modules_names = module.split('.')
+    curr_module = model
+    for name in modules_names:
+        curr_module = curr_module._modules[name]
+    requested_module = curr_module
+
+    return requested_module
+    
+def get_submodule_str(model, module):
+    """Return a string representation of `module` in the form 'layer_name.sublayer_name...'
+    """
+
+    for name, curr_module in model.named_modules():
+        if curr_module is module:
+            module_name = name
+            break
+
+    return module_name
+
+def _iterate_modules(father_name, module, module_name, adj_list, modules_dict):
+    
+    modules_dict[module_name] = module
+    for child_module_name, child_module in module.named_children():
+        full_child_name = f'{module_name}.{child_module_name}'
+        if module_name in adj_list:
+            adj_list[module_name].append(full_child_name)
+        else:
+            adj_list[module_name] = [full_child_name]        
+        _iterate_modules(module_name, child_module, full_child_name, adj_list, modules_dict)
+
+def _modules_graph(model):
+    """Get hiearchy of modules inside model as an adjacency list"""
+    
+    adj_list = {}
+    modules_dict = {}
+    _iterate_modules(None, model, model.__class__.__name__, adj_list, modules_dict)
+    
+    return adj_list, modules_dict
+
+def model_up_to(model, module):
+    """Return a new model with all layers in model up to layer `module`."""
+    
+    split_module_str = get_submodule_str(model, module)
+    split_modules_names = split_module_str.split('.')
+    module = model
+    splitted_model = []
+    name_prefix = ''
+    for idx, split_module_name in enumerate(split_modules_names):
+        for child_module_name, child_module in module.named_children():
+            if child_module_name==split_module_name:
+                if idx==len(split_modules_names)-1:
+                    # If at last module
+                    full_name = f'{name_prefix}{child_module_name}'
+                    splitted_model.append((full_name, child_module))
+                module = child_module
+                name_prefix += split_module_name + '_'
+                break
+            else:
+                full_name = f'{name_prefix}{child_module_name}'
+                splitted_model.append((full_name, child_module))
+
+    new_model = torch.nn.Sequential(OrderedDict(splitted_model))
+    
+    return new_model

@@ -46,6 +46,28 @@ class MemoryMonitor:
         #self.curr_memory = None
         self.start()
 
+class WeightedAverage:
+    
+    def __init__(self, momentum=0.9, debias=True):
+        
+        self.momentum = momentum
+        self.debias = debias
+        self.count = 0
+        self.weighted_average = 0
+        
+    def add(self, new_value):
+        
+        self.weighted_average = self.weighted_average*self.momentum + (1-self.momentum)*new_value
+        self.count += 1
+        
+    def value(self):
+        
+        value = self.weighted_average
+        if self.debias and self.count>0:
+            value = value/(1-self.momentum**self.count)
+            
+        return value
+
 def count_parameters(model):
     
     num_parameters = 0
