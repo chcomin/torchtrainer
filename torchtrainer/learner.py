@@ -125,7 +125,7 @@ class Learner:
 
         if lr is not None:
             # Fix the learning rate
-            self.scheduler = None
+            self.scheduler = LambdaLR(self.optimizer, lambda x: 1)  # Fixed learning rate
             for pg in self.optimizer.param_groups:
                 pg['lr'] = lr
 

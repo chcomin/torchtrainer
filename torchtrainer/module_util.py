@@ -3,6 +3,7 @@
 from functools import partial
 from torch import nn
 from collections import OrderedDict
+import torch
 
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 

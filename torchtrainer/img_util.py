@@ -104,7 +104,7 @@ def show(pil_img, binary=False):
 
     display(pil_img)
 
-def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, print_info=False):
+def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, return_tensor=False, print_info=False):
     """Open a PIL image
 
     Parameters
@@ -119,6 +119,8 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
         If True, image is treated as binary and intensities are coded as class indices.
         For instance, if the image contains the intensity values {0, 255}, they will be onverted
         to {0, 1}.
+    return_tensor : bool
+        If True, the image is converted to a Pytorch tensor.
     print_info :  bool
         If True, image information is printed when opening the image.
 
@@ -141,7 +143,8 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
             lut[c]=i
         img = img.point(lut)
 
-    img = pil_to_tensor(img)
+    if return_tensor:
+        img = pil_to_tensor(img)
 
     return img
 

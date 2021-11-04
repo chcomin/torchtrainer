@@ -222,7 +222,7 @@ class TransfWhitten(Transform):
 
     def apply_img(self, img):
         
-        view_shape = (1,)*(img.ndim-2)
+        view_shape = (1,)*(img.ndim-1)
         img_norm = (img - self.mean.view(-1, *view_shape))/self.std.view(-1, *view_shape)
         return img_norm
 
@@ -249,7 +249,8 @@ class TransfUnwhitten(Transform):
 
     def apply_img(self, img):
 
-        img_norm = img*self.std.view(-1, 1, 1) + self.mean.view(-1, 1, 1)
+        view_shape = (1,)*(img.ndim-1)
+        img_norm = img*self.std.view(-1, *view_shape) + self.mean.view(-1, *view_shape)
         return img_norm
 
 class TransfGrayToColor(Transform):

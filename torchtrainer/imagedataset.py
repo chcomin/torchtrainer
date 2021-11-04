@@ -44,8 +44,8 @@ class ImageDataset(torch_dataset.Dataset):
         transform(img) and return the transformed image. 
         The arguments of the first transform should be PIL.Image objects, while the return values of the last 
         transform should be float32 torch.Tensor objects.
-    on_memory : bool
-        If True, all images will be read on memory. If False, images are read from the disk when requested.
+    cache_size : int
+        Size of the memory cache. Images will be stored in memory until the requested size is reached.
     """
 
     init_params = {}
@@ -96,7 +96,6 @@ class ImageDataset(torch_dataset.Dataset):
                 img, label = self.cache_manager[idx]
             else:
                 img, label = ImageDataset.get_item(self, idx)
-                img
                 self.cache_manager[idx] = (img, label)
 
         if self.apply_transform == True:
@@ -330,15 +329,17 @@ class ImageDataset(torch_dataset.Dataset):
         """
 
         item = self.__getitem__(0)                         # Open first image to get shape
-        if not isinstance(item[1], torch.Tensor):           # In case label is not a tensor
-            item[1] = torch.tensor(item[1])
-
+        for idx, val in enumerate(item):
+            if not isinstance(val, torch.Tensor):           
+                item[idx] = TransfToTensor()(val)
+        
         num_tensors = len(self)
         tensors = [torch.zeros((num_tensors, *val.shape), dtype=val.dtype) for val in item]
 
         for item_idx, item in enumerate(iter(self)):
             for idx, val in enumerate(item):
-                tensors[idx][item_idx] = val
+                if not isinstance(val, torch.Tensor):           
+                    tensors[idx][item_idx] = TransfToTensor()(val)
 
         return tensors
 
@@ -728,6 +729,8 @@ class ImagePatchDataset(ImageDataset):
             transforms = []    
 
         img, label = self.get_img_item(img_idx)
+        if not isinstance(img, torch.Tensor):           
+            img = TransfToTensor()(img)
         img_patch = img[(...,)+patch_corners]
 
         img_transf = self.apply_transforms(transforms, img_patch)
@@ -735,7 +738,7 @@ class ImagePatchDataset(ImageDataset):
         return img_transf, label
 
     def get_img_item(self, idx):
-        
+
         return super().__getitem__(idx)
 
     def __len__(self):
@@ -747,37 +750,12 @@ class ImagePatchDataset(ImageDataset):
         cache_size = 0 if self.cache_manager is None else self.cache_manager.max_size
         patch_transforms = copy.copy(self.patch_transforms)
         return self.__class__(self.patch_shape, self.img_dir, self.name_to_label_map, filename_filter=filename_filter,
-                              img_opener=self.img_opener, transforms=transforms, cache_size=cache_size,
-                              stride=self.stride, img_shape=self.img_shape, is_3d=self.is_3d, patch_transforms=patch_transforms)
+                              img_opener=self.img_opener, transforms=transforms, stride=self.stride, img_shape=self.img_shape, 
+                              patch_transforms=patch_transforms, cache_size=cache_size)
 
-    def generate_patches_corners_for_dataset(self, patch_shape, stride, is_3d, img_shape=None):
-        '''If img_shape is None, generates indices by opening each image to get the
-        respective shape. This is useful when images have distinct sizes. If img_shape
-        is not None, uses that shape and the images are not opened, which is much faster.'''
+    def set_patch_transforms(self, patch_transforms):
 
-        if img_shape is None:
-            must_open = True
-        else:
-            must_open = False
-
-        patches_corners = []
-        patches_location = []
-        for img_idx, img_file_path in enumerate(self.img_file_paths):
-            if must_open:
-                try:
-                    img, _ = super().__getitem__(img_idx)
-                except Exception:
-                    raise Exception(f'Cannot get image {img_file_path}\n')
-                # Instantiate class in order to disconsider channel information when getting the shape
-                img_shape = PatchedImage(img, patch_shape, stride, is_3d=is_3d).img_shape
-
-            patches_corners_img = PatchedImage.generate_patches_corners_for_image(img_shape, patch_shape, stride)
-            num_patches = len(patches_corners)
-            location = slice(num_patches, num_patches+len(patches_corners_img))
-            patches_corners.extend(zip([img_idx]*len(patches_corners_img), patches_corners_img))
-            patches_location.append(location)
-
-        return patches_corners, patches_location
+        self.patch_transforms = patch_transforms
 
 class ImagePatchSegmentationDataset(ImageSegmentationDataset):
     """Patchwise image dataset storage."""
@@ -843,11 +821,15 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
             transforms = []    
         
         item = self.get_img_item(img_idx)
+        for idx, val in enumerate(item):
+            if not isinstance(val, torch.Tensor):           
+                item[idx] = TransfToTensor()(val)
         
         item_patch = []
         for value in item:
             item_patch.append(value[(...,)+patch_corners])
 
+        # Apply custom transforms
         item_transf = self.apply_transforms(transforms, *item_patch)
 
         if isinstance(item_transf[1], torch.Tensor):
@@ -856,8 +838,8 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         return item_transf
 
     def get_img_item(self, idx):
-        
-        return super().__getitem__(idx)
+
+        return super().__getitem__(idx) 
 
     def __len__(self):
         return len(self.patches_corners)
@@ -868,9 +850,13 @@ class ImagePatchSegmentationDataset(ImageSegmentationDataset):
         cache_size = 0 if self.cache_manager is None else self.cache_manager.max_size
         patch_transforms = copy.copy(self.patch_transforms)
         return self.__class__(self.patch_shape, self.img_dir, self.label_dir, self.name_to_label_map, filename_filter=filename_filter,
-                              img_opener=self.img_opener, transforms=transforms, weight_func=self.weight_func, 
-                              cache_size=cache_size, stride=self.stride, img_shape=self.img_shape, is_3d=self.is_3d, 
-                              patch_transforms=patch_transforms)
+                              img_opener=self.img_opener, label_opener=self.label_opener, transforms=transforms,  
+                              stride=self.stride, img_shape=self.img_shape, patch_transforms=patch_transforms,
+                              weight_func=self.weight_func, cache_size=cache_size)
+
+    def set_patch_transforms(self, patch_transforms):
+
+        self.patch_transforms = patch_transforms
 
 class PatchedImage:
     """Class used for representing patches in an image. Method `get_image_from_patches` can
@@ -1123,6 +1109,28 @@ class CacheManager:
         self.cache_size = 0
 
     def __setitem__(self, key, value):
+
+        data = self.data
+        data_size = self.sizeof_func(value)
+        old_size = 0
+        is_update = False
+        if key in data:
+            old_size = data[key][1]
+            is_update = True
+
+        new_cache_size = self.cache_size + data_size - old_size
+        if new_cache_size<=self.max_size:
+            data[key] = (value, data_size)
+        elif is_update:
+            # Cannot add new data with same key. Need to remove old data
+            del data[key]        
+
+        self.cache_size = new_cache_size
+
+    def _setitem__cyclic(self, key, value):
+        """Set item so that old items are removed if max_size has been reached. Usually this is not
+        desired since we will just keep removing and adding new items if the whole dataset does not 
+        fit in the memory."""
 
         data = self.data
         data_size = self.sizeof_func(value)
