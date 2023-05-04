@@ -77,6 +77,7 @@ def count_parameters(model):
     return num_parameters
 
 def profile(learner, epochs):
+    
     with torch.autograd.profiler.profile() as prof:
         learner.fi(epochs)
     print(prof.key_averages().table(sort_by="self_cpu_time_total"))

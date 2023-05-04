@@ -4,7 +4,6 @@ Dataset storage class
 
 from pathlib import Path
 import random
-import bisect
 import copy
 import numpy as np
 from PIL import Image
@@ -37,29 +36,26 @@ class ImageDataset(torch_dataset.Dataset):
         True if the image should be kept. The image is discarded otherwise. 
         Note that in both cases the image filename is passed with the extension of the file.
     img_opener : callable
-        Function with signature img_opener(img_path) for opening the images. Receives an image path
-        and returns a PIL.Image object. Images should be have uint8 type. 
-    transforms : list of callable
-        List of functions to be applied for image augmentation. Each function should have the signature
-        transform(img) and return the transformed image. 
-        The arguments of the first transform should be PIL.Image objects, while the return values of the last 
-        transform should be float32 torch.Tensor objects.
+        Function with signature img_opener(img_path) for opening the images. Must receive an image path
+        and return an image. If not provided, uses PIL.Image.open, in which case a PIL image is returned.
+    transform : callable
+        Callable to be applied for image augmentation. Must have the signature transform(img) and return 
+        the transformed image. Note, img has the same type of the output of `img_opener`.
     cache_size : int
         Size of the memory cache. Images will be stored in memory until the requested size is reached.
     """
 
+    # Save parameters for the method `subset`.
     init_params = {}
 
     @save_params(init_params)
     def __init__(self, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
-                 transforms=None, cache_size=0):
+                 transform=None, cache_size=0):
 
         if isinstance(img_dir, str):
             img_dir = Path(img_dir)
         if isinstance(filename_filter, list):
             filename_filter = set(filename_filter)
-        if transforms is None:
-            transforms = []
         if img_opener is None:
             img_opener = Image.open
         if cache_size>0:
@@ -70,8 +66,8 @@ class ImageDataset(torch_dataset.Dataset):
         self.img_dir = img_dir
         self.name_to_label_map = name_to_label_map
         self.img_opener = img_opener
-        self.transforms = transforms
-        self.apply_transform = True
+        self.transform = transform
+        self.transform_enabled = True
         self.cache_manager = cache_manager
 
         img_file_paths = []
@@ -88,63 +84,30 @@ class ImageDataset(torch_dataset.Dataset):
 
     def __getitem__(self, idx):
 
-        if self.cache_manager is None:
-            # Do not use `self` to avoid subclasses calling their own get_item
-            img, label = ImageDataset.get_item(self, idx)
-        else:
-            if idx in self.cache_manager:
-                img, label = self.cache_manager[idx]
-            else:
-                img, label = ImageDataset.get_item(self, idx)
-                self.cache_manager[idx] = (img, label)
+        if self.cache_manager is None or idx not in self.cache_manager:
+            img_file_path = self.img_file_paths[idx]
+            img = self.img_opener(img_file_path)
+            label = self.name_to_label_map(img_file_path.name)
 
-        if self.apply_transform == True:
-            img_transf = self.apply_transforms(self.transforms, img)
+        if self.cache_manager is not None:
+            # Store before applying transformation
+            self.cache_manager[idx] = img, label
+
+        if self.transform_enabled and self.transform is not None:
+            img_transf = self.transform(img)
         else:
             img_transf = img
 
-        # Hack for fastai
-        #if isinstance(img_transf, torch.Tensor):
-        #    img_transf.size = TensorShape(img_transf.shape[1:])
-        if not isinstance(label, torch.Tensor):
-            label = torch.tensor(label)
-
         return img_transf, label
 
-    def get_item(self, idx, transforms=None):
-        """Same behavior as self.__getitem__() but does not apply transformation functions. Custom
-        transformation functions can be passed as an optional parameter.
-        
-        Parameters
-        ----------
-        idx : int
-            Index of the image
-        transforms : list of callable
-            List of functions to be applied for image augmentation. See the class docstring for a description.
+    def get_item(self, idx):
+        """Get item without applying transformations."""
 
-        Returns
-        -------
-        img_transf : ImageLike
-        label : ImageLike
-        """
+        self.transform_enabled = False
+        item = self.__getitem__(idx)
+        self.transform_enabled = True
 
-        if transforms is None:
-            transforms = []
-
-        img_file_path = self.img_file_paths[idx]
-
-        img = self.img_opener(img_file_path)
-        label = self.name_to_label_map(img_file_path.name)
-
-        img_transf = self.apply_transforms(transforms, img)
-
-        # Hack for fastai
-        #if isinstance(img_transf, torch.Tensor):
-        #    img_transf.size = TensorShape(img_transf.shape[1:])
-        if not isinstance(label, torch.Tensor):
-            label = torch.tensor(label)
-
-        return img_transf, label
+        return item
 
     def __len__(self):
 
@@ -171,52 +134,16 @@ class ImageDataset(torch_dataset.Dataset):
         ImageDataset
             The new dataset.
         """
-
-        #transforms = copy.copy(self.transforms)
-        #cache_size = 0 if self.cache_manager is None else self.cache_manager.max_size
-        #return self.__class__(self.img_dir, self.name_to_label_map, filename_filter=filename_filter, img_opener=self.img_opener,
-        #                      transforms=transforms, cache_size=cache_size)
         init_params = copy.deepcopy(self.init_params)
         del init_params['self']
         init_params['filename_filter'] = filename_filter
         return self.__class__(**init_params)
-
-    def set_transforms(self, transforms):
-        """Set the data augmentation transformation functions. 
-        
-        Parameters
-        ----------
-        transforms : list of callable
-            List of functions to be applied for image augmentation. Each function should have the signature
-            transform(img) and return the transformed image. 
-            The arguments of the first transform should be PIL.Image objects, while the return values of the last 
-            transform should be float32 torch.Tensor objects.       
-        """
-
-        self.transforms = transforms
-
-    def dataloader(self, batch_size, shuffle=True, **kwargs):
-        """Return a dataloader for this dataset.
-        
-        Parameters
-        ----------
-        batch_size : int
-            The batch size to use.
-        shuffle : bool
-            If True, the data is randomly selected for each batch
-        kwargs
-            Additional keyword arguments are passed to the torch.utils.data.dataloader function.
-        """
-
-        return torch_dataloader.DataLoader(self, batch_size=batch_size, shuffle=True, **kwargs)
 
     def check_dataset(self):
         """Check if all images in the dataset can be read, and if the transformations
         can be successfully applied. It is usefull to call this function right after
         dataset creation.
         """
-
-        img_file_paths = self.img_file_paths
 
         for item_idx, item in enumerate(iter(self)):
             # Check if all data can be obtained
@@ -243,19 +170,6 @@ class ImageDataset(torch_dataset.Dataset):
         """
 
         img_file_paths_train, img_file_paths_valid = self.split_train_val_paths(valid_set, seed=seed)
-        '''# Hacky way to get parameters passed to __init__ during class construction
-        init_pars_train = {}
-        init_code = self.__init__.__code__
-        for init_par in init_code.co_varnames[1:init_code.co_argcount]:
-            if (init_par!='filename_filter'):
-                try:
-                    init_pars_train[init_par] = self.__getattribute__(init_par)
-                except AttributeError:
-                    raise AttributeError('Cannot split dataset, init parameter not registered in class')
-        init_pars_valid = init_pars_train.copy()
-
-        init_pars_train['filename_filter'] = img_file_paths_train
-        init_pars_valid['filename_filter'] = img_file_paths_valid'''
 
         train_dataset = self.subset(img_file_paths_train)
         valid_dataset = self.subset(img_file_paths_valid)
@@ -318,81 +232,249 @@ class ImageDataset(torch_dataset.Dataset):
         img_file_paths_valid = [file.name for file in img_file_paths_valid]
 
         return img_file_paths_train, img_file_paths_valid
+       
 
-    def as_tensor(self):
-        """Converts all images in the dataset to a single torch tensor.
+
+
+class ImageDataset_old(torch_dataset.Dataset):
+    """Image dataset storage class.
+
+    Receives a directory path and stores all images contained in the directory. Images can be retrieved as follows:
+
+    image_ds = ImageDataset(...)
+    img, label = image_ds[0]
+
+    Parameters
+    ----------
+    img_dir : string or Path
+        Directory containing the images to be read
+    name_to_label_map : callable
+        Function with signature name_to_label_map(img_filename) that translates image filenames into
+        labels. Receives an image filename (including the extension of the file) and returns the label
+        of the respective image.
+    filename_filter : list or callable
+        If a list, contains names of the image files that should be kept, other images are ignored
+        If a function, has signature filename_filter(img_filename), receives an image filename and returns
+        True if the image should be kept. The image is discarded otherwise. 
+        Note that in both cases the image filename is passed with the extension of the file.
+    img_opener : callable
+        Function with signature img_opener(img_path) for opening the images. Must receive an image path
+        and return an image. If not provided, uses PIL.Image.open, in which case a PIL image is returned.
+    transform : callable
+        Callable to be applied for image augmentation. Must have the signature transform(img) and return 
+        the transformed image. Note, img has the same type of the output of `img_opener`.
+    cache_size : int
+        Size of the memory cache. Images will be stored in memory until the requested size is reached.
+    """
+
+    # Save parameters for the method `subset`.
+    init_params = {}
+
+    @save_params(init_params)
+    def __init__(self, img_dir, name_to_label_map, filename_filter=None, img_opener=None,
+                 transform=None, cache_size=0):
+
+        if isinstance(img_dir, str):
+            img_dir = Path(img_dir)
+        if isinstance(filename_filter, list):
+            filename_filter = set(filename_filter)
+        if img_opener is None:
+            img_opener = Image.open
+        if cache_size>0:
+            cache_manager = CacheManager(lambda item: CacheManager.sizeof_pil(item[0]), cache_size)
+        else:
+            cache_manager = None
+
+        self.img_dir = img_dir
+        self.name_to_label_map = name_to_label_map
+        self.img_opener = img_opener
+        self.transform = transform
+        self.cache_manager = cache_manager
+
+        img_file_paths = []
+        for img_file_path in img_dir.iterdir():
+            img_filename = img_file_path.name
+            if filename_filter is None:
+                img_file_paths.append(img_file_path)
+            elif isinstance(filename_filter, (set, list)):
+                if img_filename in filename_filter: img_file_paths.append(img_file_path)
+            elif filename_filter(img_filename):
+                img_file_paths.append(img_file_path)
+
+        self.img_file_paths = img_file_paths
+
+    def __getitem__(self, idx):
+
+        if self.cache_manager is None:
+            img, label = self.get_item(self, idx)
+        else:
+            if idx in self.cache_manager:
+                img, label = self.cache_manager[idx]
+            else:
+                img, label = self.get_item(self, idx)
+                self.cache_manager[idx] = (img, label)
+
+        if self.transform_enabled:
+            img_transf = self.apply_transform(self.transform, img)
+        else:
+            img_transf = img
+
+        return img_transf, label
+
+    def get_item(self, idx):
+        """Same behavior as self.__getitem__() but does not apply transformation functions. A custom
+        transformation function can be passed as an optional parameter.
+        
+        Parameters
+        ----------
+        idx : int
+            Index of the image
+        transform : callable
+            Function to be applied for image augmentation. See the class docstring for a description.
 
         Returns
         -------
-        tensors : torch.Tensor
-            Tensor with dimensions (num images, num channels, height, width)
+        img_transf : ImageLike
+        label : ImageLike
         """
 
-        item = self.__getitem__(0)                         # Open first image to get shape
-        for idx, val in enumerate(item):
-            if not isinstance(val, torch.Tensor):           
-                item[idx] = TransfToTensor()(val)
+        if transforms is None:
+            transforms = []
+
+        img_file_path = self.img_file_paths[idx]
+
+        img = self.img_opener(img_file_path)
+        label = self.name_to_label_map(img_file_path.name)
+
+        if transform is not None:
+            img_transf = self.apply_transform(transform, img)
+
+        return img_transf, label
+
+    def __len__(self):
+
+        return len(self.img_file_paths)
+
+    def copy(self):
+        """Copy this dataset."""
+
+        return self.subset(lambda x:True)
+
+    def subset(self, filename_filter):
+        """Return a new ImageDataset containing only images for which filename_filter(img_filename) is True.
         
-        num_tensors = len(self)
-        tensors = [torch.zeros((num_tensors, *val.shape), dtype=val.dtype) for val in item]
+        Parameters
+        ----------
+        filename_filter : list or callable
+            If a list, contains names of the image files that should be kept, other images are ignored
+            If a function, has signature filename_filter(img_filename), receives an image filename and returns
+            True if the image should be kept. The image is discarded otherwise. 
+            Note that in both cases the image filename is passed with the extension of the file.
+
+        Returns
+        -------
+        ImageDataset
+            The new dataset.
+        """
+        init_params = copy.deepcopy(self.init_params)
+        del init_params['self']
+        init_params['filename_filter'] = filename_filter
+        return self.__class__(**init_params)
+
+    def check_dataset(self):
+        """Check if all images in the dataset can be read, and if the transformations
+        can be successfully applied. It is usefull to call this function right after
+        dataset creation.
+        """
 
         for item_idx, item in enumerate(iter(self)):
-            for idx, val in enumerate(item):
-                if not isinstance(val, torch.Tensor):           
-                    tensors[idx][item_idx] = TransfToTensor()(val)
+            # Check if all data can be obtained
+            pass
+        print('All images read')
 
-        return tensors
-
-    def apply_transforms(self, transforms, img):
-        """Apply transformations stored in `transforms`.
+    def split_train_val(self, valid_set=0.2, seed=None):
+        """Split dataset into train and validation. Return two new datasets.
 
         Parameters
         ----------
-        transforms : list of callable
-            List of functions to be applied for image augmentation. See the class docstring for a description.
-        img : ImageLike
-            Image to be transformed.
+        valid_set : float or list
+            If float, a fraction `valid_set` of the dataset will be used for validation,
+            the rest will be used for training.
+            If list, should contain the names of the files used for validation. The remaining
+            images will be used for training. Note that the names must include the file extensions.
 
         Returns
         -------
-        img : ImageLike
-            Resulting image.
+        train_dataset : ImageDataset
+            Dataset to be used for training
+        valid_dataset : ImageDataset
+            Dataset to be used for validation
         """
 
-        if callable(transforms):
-            img = transforms(img)
-        else:
-            for transform in transforms:
-                    img = transform(img)
-        return img
+        img_file_paths_train, img_file_paths_valid = self.split_train_val_paths(valid_set, seed=seed)
 
-    def set_apply_transform(self, apply_transform):
-        """Set the self.apply_transform attribute. 
-        
+        train_dataset = self.subset(img_file_paths_train)
+        valid_dataset = self.subset(img_file_paths_valid)
+
+        return train_dataset, valid_dataset
+
+    def split_train_val_paths(self, valid_set=0.2, seed=None):
+        """Generate image names to be used for spliting the dataset.
+
         Parameters
         ----------
-        apply_transform : bool
-            If False, transformations are not applied to images when calling self.__getitem___()
+        valid_set : float or list
+            If float, a fraction `valid_set` of the dataset will be used for validation,
+            the rest will be used for training.
+            If list, should containg the names of the files used for validation. The remaining
+            images will be used for training. Note that the names must include the file extensions.
+
+        Returns
+        -------
+        img_file_paths_train : list
+            Images used for training
+        img_file_paths_valid : list
+            Images used for validation
         """
 
-        self.apply_transform = apply_transform
-
-    def load_on_memory(self):
-        """Load all images on memory."""
-
         img_file_paths = self.img_file_paths
-        img, label = self.get_item(0)
+        num_images = len(img_file_paths)
 
-        img = TransfToTensor()(img)
-        imgs = torch.zeros((len(img_file_paths),)+img.shape, dtype=img.dtype)
-        labels = torch.zeros(len(img_file_paths), dtype=torch.long)
-        imgs[0] = img
-        labels[0] = label
-        for img_idx, img_file_path in enumerate(img_file_paths[1:], start=1):
-            img, label = self.get_item(img_idx)
-            imgs[img_idx], labels[img_idx] = TransfToTensor()(img), label
+        img_file_paths_train = []
+        img_file_paths_valid = []
 
-        self.cache = {'imgs':imgs, 'labels':labels}            
+        if isinstance(valid_set, list):
+
+            valid_set_set = set(valid_set)
+            for file_idx, img_file_path in enumerate(img_file_paths):
+                if img_file_path.name in valid_set_set:
+                    img_file_paths_valid.append(img_file_path)
+                else:
+                    img_file_paths_train.append(img_file_path)
+
+            if (len(img_file_paths_train)+len(img_file_paths_valid))!=len(img_file_paths):
+                print('Warning, some files in validation set not found')
+
+        elif isinstance(valid_set, float):
+            if seed is not None:
+                random.seed(seed)
+
+            num_images_valid = int(num_images*valid_set)
+            num_images_train = num_images - num_images_valid
+
+            ind_all = list(range(num_images))
+            random.shuffle(ind_all)
+            ind_train = ind_all[0:num_images_train]
+            ind_valid = ind_all[num_images_train:]
+
+            img_file_paths_train = [img_file_paths[ind] for ind in ind_train]
+            img_file_paths_valid = [img_file_paths[ind] for ind in ind_valid]
+
+        img_file_paths_train = [file.name for file in img_file_paths_train]
+        img_file_paths_valid = [file.name for file in img_file_paths_valid]
+
+        return img_file_paths_train, img_file_paths_valid
+       
 
 class ImageSegmentationDataset(ImageDataset):
     """
@@ -475,7 +557,7 @@ class ImageSegmentationDataset(ImageDataset):
                 item = ImageSegmentationDataset.get_item(self, idx)
                 self.cache_manager[idx] = item
     
-        if self.apply_transform:
+        if self.set_transforms_on:
             item_transf = self.apply_transforms(self.transforms, *item)
         else:
             item_transf = item
@@ -522,10 +604,6 @@ class ImageSegmentationDataset(ImageDataset):
         
         item_transf = self.apply_transforms(transforms, *item)
 
-        # Hack for fastai
-        #for r in item_transf:
-        #    if isinstance(r, torch.Tensor):
-        #        r.size = TensorShape(r.shape[1:])
 
         if isinstance(item_transf[1], torch.Tensor):
             item_transf[1] = item_transf[1].long().squeeze()
@@ -591,79 +669,6 @@ class ImageSegmentationDataset(ImageDataset):
             for transform in transforms:
                     item = transform(*item)
         return item
-
-    def load_on_memory(self):
-        """Load all images on memory."""
-
-        img_file_paths = self.img_file_paths
-        img, label = self.get_item(0)
-
-        img = TransfToTensor()(img)
-        imgs = torch.zeros((len(img_file_paths),)+img.shape, dtype=img.dtype)
-        labels = torch.zeros_like(imgs, dtype=torch.long)
-        imgs[0] = img
-        labels[0] = label
-        for img_idx, img_file_path in enumerate(img_file_paths[1:], start=1):
-            img, label = self.get_item(img_idx)
-            imgs[img_idx], labels[img_idx] = TransfToTensor()(img, label)
-
-        self.cache = {'imgs':imgs, 'labels':labels}    
-
-class TensorShape(tuple):
-    """Class for adding a `size` atribute on tensors that works on both PyTorch, Jupyter and Fastai."""
-
-    def __new__ (cls, args):
-        return super(TensorShape, cls).__new__(cls, tuple(args))
-
-    def __call__(self, dim=None):
-
-        if dim is None:
-            return self
-        else:
-            return self[dim]
-
-class ImageItem:
-    """Initial implementation of an image class. Not used."""
-
-    def __init__(self, img, label=None, weight=None):
-
-        self.img = img
-        self.label = label
-        self.weight = weight
-
-    def update_img(self, img): self.img = img
-    def update_label(self, label): self.label = label
-    def update_weight(self, weight): self.weight = weight
-    def get_img(self): return self.img
-    def get_label(self): return self.label
-    def get_weight(self): return self.weight
-    def get_items(self): return self.img, self.label, self.weight
-    def get_defined_items(self):
-        '''Return items that are not None in a list. If only the image has been defined, return
-        the image (not a list of one item).'''
-
-        ret = [self.img]
-        if self.label is not None: ret.append(self.label)
-        if self.weight is not None: ret.append(self.weight)
-        if len(ret)==1:
-            return ret[0]
-        else:
-            return ret
-
-    def has_label(self): return self.label is not None
-    def has_weight(self): return self.weight is not None
-
-    def apply_function(self, func, return_values=False, **kwargs):
-
-        self.img = func(self.img, **kwargs)
-        if self.label is not None: self.label = func(self.label, **kwargs)
-        if self.weight is not None: self.weight = func(self.weight, **kwargs)
-
-        if return_values:
-            ret = [self.img]
-            if self.label is not None: ret.append(self.label)
-            if self.weight is not None: ret.append(self.weight)
-            return ret
 
 class ImagePatchDataset(ImageDataset):
     """Patchwise image dataset storage.
@@ -1179,6 +1184,3 @@ class CacheManager:
     def sizeof_torch(cls, tensor):
         return tensor.element_size()*tensor.numel()
         
-
-
-    

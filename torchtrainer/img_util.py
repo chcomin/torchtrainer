@@ -7,7 +7,7 @@ import torch
 import random
 import matplotlib.pyplot as plt
 from IPython.display import display
-from ipywidgets import interact, fixed, IntSlider
+#from ipywidgets import interact, fixed, IntSlider
 from .transforms import pil_to_tensor
 
 def pil_img_info(img, print_repr=False):

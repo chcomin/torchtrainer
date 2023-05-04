@@ -27,7 +27,7 @@ class ActivationSampler(nn.Module):
 
     def get_hook(self):
         def hook(model, input, output):
-            self.activation = output
+            self.activation = output.detach().cpu()
         return hook
 
     def extra_repr(self):

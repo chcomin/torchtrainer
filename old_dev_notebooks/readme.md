@@ -1,1 +1,0 @@
-These notebooks were used for developing an initial version of torchtrainer and are here only for reference.
