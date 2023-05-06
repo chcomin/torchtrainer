@@ -1,4 +1,5 @@
 '''
+*** Deprecated ***
 Image transformation routines
 '''
 
