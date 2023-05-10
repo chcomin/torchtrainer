@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from collections.abc import Callable
-from typing import Union, Optional
+from typing import Optional
 
 class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation gradients."""
@@ -285,7 +285,7 @@ class Inspector:
 
             dict_model_stats[module_name][data_type] = saved_data
 
-def agg_func_stas(data, module_name, data_type, param_name=None):
+def agg_func_stats(data, module_name, data_type, param_name=None):
     """Example aggregator function for storing some statistics about the model."""
     
     mean = data.mean()

@@ -3,13 +3,11 @@ Dataset storage class
 '''
 
 from pathlib import Path
-import random
 import copy
 import numpy as np
 from PIL import Image
 import torch
 from torch.utils.data import dataset as torch_dataset
-from .transforms import TransfToTensor, TransfToPil, TransfToNumpy
 from .util import save_params
 
 class ImageDataset(torch_dataset.Dataset):
@@ -786,6 +784,7 @@ def generate_patches_corners_for_dataset(dataset, patch_shape, stride, is_3d, im
     return patches_corners, patches_location
 
 class CacheManager:
+    """Class for storing data in memory."""
 
     def __init__(self, sizeof_func, max_size):
         

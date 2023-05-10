@@ -2,13 +2,18 @@
 Utilities for working with PIL, tensor, numpy and imgaug images
 '''
 
+import random
+import numpy as np
 from PIL import Image
 import torch
-import random
+
 import matplotlib.pyplot as plt
 from IPython.display import display
-#from ipywidgets import interact, fixed, IntSlider
-from .transforms import pil_to_tensor
+
+try:
+    from ipywidgets import interact, IntSlider
+except ModuleNotFoundError:
+    pass # Do not import ipywidgets if not present
 
 def pil_img_info(img, print_repr=False):
     """Return the following information about a PIL image:
@@ -51,39 +56,6 @@ def pil_img_info(img, print_repr=False):
 
     return info_str
 
-def tensor_info(tensor, print_repr=False):
-    """Return the following information about a torch tensor:
-    Shape
-    Type
-
-    Parameters
-    ----------
-    tensor : torch.Tensor
-        Torch tensor
-    print_repr : bool
-        If False, only returns a string with the tensor information. If True,
-        also prints the information
-
-    Returns
-    -------
-    info_str : string
-        Information about the tensor
-    """
-
-    if isinstance(tensor, torch.Tensor):
-        info_str = f'''
-        Tensor information:
-        Shape:{tensor.shape}
-        Type:{tensor.dtype}
-        '''
-    else:
-        info_str = 'Not a tensor'
-
-    if print_repr:
-        print(info_str)
-
-    return info_str
-
 def show(pil_img, binary=False):
     """Show PIL image in a Jupyter notebook
 
@@ -104,7 +76,7 @@ def show(pil_img, binary=False):
 
     display(pil_img)
 
-def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, return_tensor=False, print_info=False):
+def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, print_info=False):
     """Open a PIL image
 
     Parameters
@@ -119,8 +91,6 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
         If True, image is treated as binary and intensities are coded as class indices.
         For instance, if the image contains the intensity values {0, 255}, they will be onverted
         to {0, 1}.
-    return_tensor : bool
-        If True, the image is converted to a Pytorch tensor.
     print_info :  bool
         If True, image information is printed when opening the image.
 
@@ -143,11 +113,7 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
             lut[c]=i
         img = img.point(lut)
 
-    if return_tensor:
-        img = pil_to_tensor(img)
-
     return img
-
 
 def get_shape(img, warn=True):
     """Get the shape of a ndarray, PIL or tensor image. Works for 2D and 3D images. Warning, for 

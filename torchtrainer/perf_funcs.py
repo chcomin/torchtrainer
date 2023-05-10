@@ -1,39 +1,12 @@
 '''Functions for measuring the performance of a classifier.'''
 
-from functools import partial
 import scipy.ndimage as ndi
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-def iou(input, target, ignore_index=None):
-    '''Calculate intersection over union for predicted probabilities. Assumes background has
-    value 0 and the segmentation has value 1
-
-    Parameters
-    ----------
-    input : torch.Tensor
-        Output class probabilities of the network. Must have shape (batch size, num classes, height, width)
-    target : torch.Tensor
-        Target tensor. Must have shape (batch size, height, width)
-    ignore_index : int
-        Not implemented!
-
-    Returns
-    -------
-    iou : float
-        The calculated intersection over union
-    '''
-
-    res_labels = torch.argmax(input, dim=1)
-    sum_labels = 2*target + res_labels
-
-    tp = (sum_labels==3).sum()
-    iou = tp.float()/((sum_labels>0).sum().float())
-
-    return iou
-
-def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=None):
+@torch.no_grad()
+def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
     '''Calculate some performance metrics for segmentation results. Assumes background has value 0 and
     the segmentation has value 1. If more than one image in batch, returns a single value representing the
     average performance for all images in the batch.
@@ -47,7 +20,7 @@ def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=Non
     Parameters
     ----------
     input : torch.Tensor
-        Output class probabilities of the network. Must have shape (batch size, num classes, height, width)
+        Output of the network. Must have shape (batch size, num classes, height, width)
     target : torch.Tensor
         Target tensor. Must have shape (batch size, height, width)
     meas : str or list of str
@@ -67,12 +40,10 @@ def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=Non
         the metrics names. The values for each item depend on `reduce_batch` as above.
     '''
 
-    input = input.detach()
     if isinstance(meas, str):
-        meas = [meas]
+        meas = (meas)
 
     beta = torch.tensor(1.)
-    target = target.squeeze(1)
 
     res_labels = torch.argmax(input, dim=1)
 
@@ -84,21 +55,20 @@ def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=Non
     axes = list(range(1, target.ndim))   # Exclude batch dimension in sum
     tps = torch.sum(y_cases == 3, dim=axes)
     fps = torch.sum(y_cases == 1, dim=axes)
-    tns = torch.sum(y_cases == 0, dim=axes)
+    #tns = torch.sum(y_cases == 0, dim=axes)  # not necessary
     fns = torch.sum(y_cases == 2, dim=axes)
 
     if reduce_batch:
         tps = tps.sum(dim=0, keepdim=True)
         fps = fps.sum(dim=0, keepdim=True)
-        tns = tns.sum(dim=0, keepdim=True)
+        #tns = tns.sum(dim=0, keepdim=True)  # not necessary
         fns = fns.sum(dim=0, keepdim=True)
 
-    bs = target.shape[0]
-    precisions = torch.zeros(bs)
-    recalls = torch.zeros(bs)
-    f1s = torch.zeros(bs)
-    ious = torch.zeros(bs)
-    for idx, (tp, fp, tn, fn) in enumerate(zip(tps, fps, tns, fns)):
+    precisions = torch.zeros(len(tps))
+    recalls = torch.zeros(len(tps))
+    f1s = torch.zeros(len(tps))
+    ious = torch.zeros(len(tps))
+    for idx, (tp, fp, fn) in enumerate(zip(tps, fps, fns)):
         if tp!=0 or fp!=0:
             precision = tp / (tp + fp)
         else:
@@ -140,20 +110,6 @@ def segmentation_accuracy(input, target, meas='iou', reduce_batch=True, mask=Non
 
     return out_meas
 
-def build_segmentation_accuracy_dict():
-    '''Build dictionary containing performance metrics from `segmentation_accuracy`
-
-    Returns
-    -------
-    metrics_dict : dict
-        Keys indicate metric name and values are respecive functions.
-    '''
-
-    metrics_dict = {}
-    for mea in ['iou', 'f1', 'prec', 'rec']:
-        metrics_dict[mea] = partial(segmentation_accuracy, meas=mea)
-    return metrics_dict
-
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
     '''Weighted cross entropy. The probabilities for each pixel are weighted according to
     `weight`.
@@ -174,29 +130,10 @@ def weighted_cross_entropy(input, target, weight=None, epoch=None):
         The calculated loss
     '''
 
-    loss_per_pix = F.nll_loss(input, target, reduction='none')
+    loss_per_pix = F.cross_entropy(input, target, reduction='none')
     loss = (weight*loss_per_pix).mean()
 
-    '''bs = input.shape[0]
-    num_comps = torch.zeros(bs)
-    for idx in range(bs):
-        img_lab, num_comps[idx] = ndi.label(np.array(target.to('cpu')))
-    avg_num_comp = num_comps.mean()
-
-    if epoch<10:
-        loss = loss_class
-    else:
-        loss = loss_class + 0.0005*avg_num_comp'''
-
     return loss
-
-def label_weighted_loss(input, target, *args, loss_func=F.cross_entropy):
-    '''Return loss weighted by inverse label frequency. loss_func must have a weight argument.'''
-
-    num_pix_in_class = torch.bincount(target.view(-1)).float()
-    weight = 1./num_pix_in_class
-    weight = weight/weight.sum()
-    return loss_func(input, target, weight=weight)
 
 def apply_on_cropped_data(func, has_weight=False, **kwargs):
 
@@ -270,20 +207,44 @@ def center_expand_tensor(self, tensor, out_shape):
 
     return F.pad(tensor, pad)
 
-
-class SmoothenValue:
+class WeightedAverage:
     '''Create weighted moving average.'''
-    def __init__(self, beta):
 
-        self.beta = beta
+    def __init__(self, momentum=0.9):
+
+        self.momentum = momentum
         self.n = 0
         self.mov_avg = 0
 
     def add_value(self, val):
 
         self.n += 1
-        self.mov_avg = self.beta * self.mov_avg + (1 - self.beta) * val
-        self.smooth = self.mov_avg / (1 - self.beta ** self.n)
+        self.mov_avg = self.momentum * self.mov_avg + (1 - self.momentum) * val
+        self.smooth = self.mov_avg / (1 - self.momentum ** self.n)
+
+    def get_average(self):
+
+        return self.smooth
+
+class LabelWeightedCrossEntropyLoss(torch.nn.Module):
+    '''Return loss weighted by inverse label frequency in an image.'''
+    
+    def __init__(self, reduction='mean'):
+        super().__init__()
+        
+        self.reduction = reduction
+        
+    def forward(self, input, target):
+        
+        return label_weighted_loss(input, target, F.cross_entropy, self.reduction)
+
+def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction='mean'):
+    '''Return loss weighted by inverse label frequency. loss_func must have a weight argument.'''
+
+    num_pix_in_class = torch.bincount(target.view(-1)).float()
+    weight = 1./num_pix_in_class
+    weight = weight/weight.sum()
+    return loss_func(input, target, weight=weight, reduction=reduction)
 
 class FocalLoss(torch.nn.Module):
     
@@ -451,8 +412,8 @@ class CocoPerf:
         iou_thrs = self.iou_thrs
         num_thrs = len(iou_thrs)
         
-        instances_gt = get_instances_coords(img_gt)
-        instances_det = get_instances_coords(img_det)
+        instances_gt = _get_instances_coords(img_gt)
+        instances_det = _get_instances_coords(img_det)
         num_gt = len(instances_gt)
         num_det = len(instances_det)
             
@@ -580,7 +541,7 @@ class CocoPerf:
             col = index - row*num_cols
             img[row, col] = color
     
-class Instance:
+class _Instance:
     
     def __init__(self, id, points):
         
@@ -594,7 +555,7 @@ class Instance:
         
         return np.mean(self.points, axis=0)
     
-def get_instances_coords(img):
+def _get_instances_coords(img):
 
     se = np.ones((3, 3))
     img_label, num_inst = ndi.label(img, se)
@@ -603,5 +564,5 @@ def get_instances_coords(img):
     inst_points = ndi.labeled_comprehension(img_label, img_label, indices, 
                                              lambda v, p: (v[0], p), list, None, 
                                              pass_positions=True)
-    inst_points = [Instance(v[0]-1, set(v[1])) for v in inst_points]
+    inst_points = [_Instance(v[0]-1, set(v[1])) for v in inst_points]
     return inst_points

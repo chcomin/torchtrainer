@@ -33,69 +33,6 @@ class ActivationSampler(nn.Module):
     def extra_repr(self):
         return f'{self.model_name}'
 
-class GradientSampler(nn.Module):
-    """Generates a hook for sampling a layer gradients. Can be used as
-
-    sampler = GradientSampler(layer_in_model)
-    output = model(input)
-    layer_activation = sampler()
-
-    Parameters
-    ----------
-    model : torch.nn
-        The model that will be sampled
-    detach : bool
-        If True, the retuned tensors are detached from the computation graph and
-        moved to the cpu
-    sample_input : bool
-        If True, sample the gradients with respect to the model inputs
-    sample_output : bool
-        If True, sample the gradients with respect to the model outputs
-    input_index : int
-        Index of the gradient to return. For models with a single input, this 
-        index should be 0, since there is only one gradient. If None, a list
-        containing all gradients are returned
-    output_index : int
-        Same as above, but for the output gradient.
-    """
-
-    def __init__(self, model, detach=False, sample_input=True, sample_output=True, input_index=0, 
-                 output_index=0):
-        super().__init__()
-
-        self.detach = detach
-        self.sample_input = sample_input
-        self.sample_output = sample_output
-        self.input_index = input_index
-        self.output_index = output_index
-        self.model_name = model.__class__.__name__
-        self.gradient_wrt_inputs = None
-        self.gradient_wrt_outputs = None
-        model.register_full_backward_hook(self.get_hook())
-
-    def forward(self, x=None):
-        return self.gradient_wrt_inputs, self.gradient_wrt_outputs
-
-    def get_hook(self):
-        def hook(model, grad_input, grad_output):
-            if self.sample_input:
-                if self.detach:
-                    grad_input = [gi.detach().cpu() for gi in grad_input]
-                if self.input_index is not None:
-                    grad_input = grad_input[self.input_index]
-                self.gradient_wrt_inputs = grad_input
-            if self.sample_output:
-                if self.detach:
-                    grad_output = [go.detach().cpu() for go in grad_output]
-                if self.output_index is not None:
-                    grad_output = grad_output[self.output_index]
-                self.gradient_wrt_outputs = grad_output
-
-        return hook
-
-    def extra_repr(self):
-        return f'{self.model_name}'
-
 class Lambda(nn.Module):
     '''Transforms function into a module'''
 
@@ -173,45 +110,6 @@ class Hooks:
         for hook in self.hooks:
             hook.remove()
 
-def _calculate_stats(storage, model, input, output, store_act=True, store_weights=False):
-
-    if store_act:
-        if 'activation' not in storage:
-            storage['activation'] = {}
-        if 'mean' not in storage['activation']:
-            storage['activation']['mean'] = []
-        if 'std' not in storage['activation']:
-            storage['activation']['std'] = []
-        if 'hist' not in storage['activation']:
-            storage['activation']['hist'] = []
-
-        activation = output.detach()
-        storage['activation']['mean'].append(activation.mean().item())
-        storage['activation']['std'].append(activation.std().item())
-        storage['activation']['hist'].append(activation.cpu().histc(100,-10,10)) #histc isn't implemented on the GPU
-
-    if store_weights:
-        if 'weights' not in storage:
-            storage['weights'] = {}
-        if 'mean' not in storage['weights']:
-            storage['weights']['mean'] = []
-        if 'std' not in storage['weights']:
-            storage['weights']['std'] = []
-
-        try:
-            weight = model.weight
-        except Exception:
-            raise AttributeError('Model does not have `weight` attribute')
-        else:
-            weight = weight.detach()
-            storage['weights']['mean'].append(weight.mean().item())
-            storage['weights']['std'].append(weight.std().item())
-            storage['weights']['hist'].append(weight.cpu().histc(100,-10,10)) #histc isn't implemented on the GPU
-
-def calculate_stats(store_act=True, store_weights=False):
-
-    return partial(_calculate_stats, store_act=store_act, store_weights=store_weights)
-
 def split_modules(model, modules_to_split):
     '''Split `model` layers into different groups. Useful for freezing part of the model
     or using different learning rates.'''
@@ -275,13 +173,6 @@ def unfreeze(module_groups):
     '''Unfreezes the entire model.'''
 
     groups_requires_grad(module_groups, True)
-
-def get_output_shape(self, model, img_shape):
-
-    input_img = torch.zeros(img_shape)[None, None]
-    input_img = input_img.to(next(model.parameters()).device)
-    output = model(input_img)
-    return output[0, 0].shape
 
 def get_submodule(model, module):
     """Return a module inside `model`. Module should be a string of the form
