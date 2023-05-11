@@ -1,1 +1,1 @@
-from . import resnet18, resunet, simplenet, unet
+from . import resnet_seg, resunet, unet

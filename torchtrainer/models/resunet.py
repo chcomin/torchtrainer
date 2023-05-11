@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
-from .layers import ResBlock, Concat, Blur
+from .layers import BasicBlock, Concat, Blur
 from ..module_util import ActivationSampler
 from collections import OrderedDict
 from ..module_util import get_submodule
