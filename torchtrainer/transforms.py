@@ -4,11 +4,9 @@ Image transformation routines
 '''
 
 from functools import partial
-#import imgaug as ia
 import numpy as np
 import torch
 from torchvision import transforms as torch_transforms
-#import cv2
 from PIL import Image
 
 class Transform:
