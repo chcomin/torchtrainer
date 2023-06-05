@@ -4,12 +4,129 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import tensor
-from .layers import BasicBlock, Concat, Blur
+from .layers import BasicBlock, Upsample, conv3x3, conv1x1, Concat, Blur
 from ..module_util import ActivationSampler
 from collections import OrderedDict
 from ..module_util import get_submodule
 
-class Encoder(nn.Module):
+class ResUNet(nn.Module):
+
+    def __init__(self, layers, inplanes, num_classes=2, zero_init_residual=False):
+        """U-Net with residual blocks."""
+
+        super().__init__()
+
+        self.norm_layer = nn.BatchNorm2d
+
+        self.conv1 = nn.Conv2d(1, inplanes[0], kernel_size=7, stride=1, padding=3, bias=False)
+        self.bn1 = self.norm_layer(inplanes[0], momentum=0.1)
+        self.relu = nn.ReLU(inplace=True)
+
+        stages = [('stage_0', self._make_down_layer(inplanes[0], inplanes[0], layers[0], stride=2))]
+        for idx in range(len(layers)-1):
+            stages.append((f'stage_{idx+1}', self._make_down_layer(inplanes[idx], inplanes[idx+1], layers[idx+1], stride=2)))
+
+        self.down_stages = nn.ModuleDict(stages)
+        #self.down_stages = nn.ModuleList(stages)
+        self.mid_block = nn.Sequential(
+            conv3x3(inplanes[-1], inplanes[-1]),
+            conv3x3(inplanes[-1], inplanes[-1])
+        )
+
+        upsamples = []
+        stages = []
+        for idx in range(len(layers)-1, 0, -1):
+            upsample, stage = self._make_up_layer(inplanes[idx], inplanes[idx-1], layers[idx-1], stride=2)
+            upsamples.append(upsample)
+            stages.append(stage)
+        upsample, stage = self._make_up_layer(inplanes[0], inplanes[0], layers[0], stride=2)
+        upsamples.append(upsample)
+        stages.append(stage)
+
+        self.upsamples = nn.ModuleList(upsamples)
+        self.up_stages = nn.ModuleList(stages)
+        self.conv_output = conv3x3(inplanes[0], num_classes)
+
+        self._init_parameters(zero_init_residual)
+
+    def _init_parameters(self, zero_init_residual):
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+        if zero_init_residual:
+            for m in self.modules():
+                if isinstance(m, BasicBlock):
+                    nn.init.constant_(m.bn2.weight, 0)
+
+    def _make_down_layer(self, inplanes, planes, blocks, stride):
+
+        residual_adj = None
+        norm_layer = self.norm_layer
+        block = BasicBlock
+
+        if stride != 1 or inplanes != planes:
+            residual_adj = nn.Sequential(
+                conv1x1(inplanes, planes, stride),
+                norm_layer(planes, momentum=0.1),
+            )
+
+        layers = []
+        layers.append(block(inplanes, planes, stride, residual_adj))
+        for _ in range(1, blocks):
+            layers.append(block(planes, planes))
+
+        return nn.Sequential(*layers)
+    
+    def _make_up_layer(self, inplanes, planes, blocks, stride):
+
+        residual_adj = None
+        norm_layer = self.norm_layer
+        block = BasicBlock
+
+        residual_adj = nn.Sequential(
+            conv1x1(2*planes, planes),
+            norm_layer(planes, momentum=0.1),
+        )
+
+        upsample = Upsample(inplanes, planes, stride=stride, use_conv=True)
+        layers = []
+        layers.append(block(2*planes, planes, 1, residual_adj))
+        for _ in range(1, blocks):
+            layers.append(block(planes, planes))
+
+        return upsample, nn.Sequential(*layers)
+
+    def forward(self, x):
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+
+        down_samples = ()
+        for _, stage in self.down_stages.items():
+            down_samples += (x,)
+            x = stage(x)
+
+        x = self.mid_block(x)
+
+        down_samples = down_samples[::-1]
+        for upsample, stage, sample in zip(self.upsamples, self.up_stages, down_samples):
+            x = upsample(x, sample.shape[-2:])
+            x = torch.cat((sample, x), dim=1)
+            x = stage(x)
+
+        x = self.conv_output(x)     
+
+        return x  
+        
+
+
+class Encoder_old(nn.Module):
 
     def __init__(self, num_channels, reduce_by=1):
         """Encoder part of U-Net"""
@@ -31,7 +148,7 @@ class Encoder(nn.Module):
         for layer in self.children(): x = layer(x)
         return x
 
-class ResUNet(nn.Module):
+class ResUNet_old(nn.Module):
 
     def __init__(self, num_channels, num_classes):
         """U-Net with residual blocks."""
@@ -105,7 +222,7 @@ class ResUNet(nn.Module):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
 
-class FlexibleEncoder(nn.Module):
+class FlexibleEncoder_old(nn.Module):
 
     def __init__(self, num_channels, layers, first_kernel_size=7):
         """Encoder part of FlexibleResUNet"""
@@ -127,7 +244,7 @@ class FlexibleEncoder(nn.Module):
         for layer in self.children(): x = layer(x)
         return x
 
-class FlexibleResUNet(nn.Module):
+class FlexibleResUNet_old(nn.Module):
 
     def __init__(self, num_channels, num_classes, layers=(64, 64, 128, 256, 512, 1024), use_blur=True):
         """U-Net with residual blocks that adapts the number of layers and number of filters
