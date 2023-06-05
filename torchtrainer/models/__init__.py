@@ -1,1 +1,1 @@
-from . import resunet
+from . import resnet_seg, resunet
