@@ -27,11 +27,8 @@ class ResUNet(nn.Module):
 
         self.encoder = nn.ModuleDict(stages)
 
-        #Middle blocks
-        self.mid_block = nn.Sequential(
-            conv3x3(inplanes[-1], inplanes[-1]),
-            conv3x3(inplanes[-1], inplanes[-1])
-        )
+        #Middle block
+        self.mid_block = BasicBlock(inplanes[-1], inplanes[-1])
 
         #Decoder stages. Each stage involves an upsample and a halving of the number of channels at the beggining. The
         #upsampled activation is concatenated with the respective activation of the encoder and the number of channels
@@ -92,7 +89,7 @@ class ResUNet(nn.Module):
             norm_layer(planes, momentum=0.1),
         )
 
-        upsample = Upsample(inplanes, planes, stride=stride, use_conv=True)
+        upsample = Upsample(inplanes, planes, stride=stride)
         layers = []
         layers.append(block(2*planes, planes, 1, residual_adj))
         for _ in range(1, blocks):

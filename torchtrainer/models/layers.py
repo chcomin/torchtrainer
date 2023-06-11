@@ -28,9 +28,10 @@ class BasicBlock(nn.Module):
 
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm2d(planes, momentum=0.1)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu1 = nn.ReLU(inplace=True)
         self.conv2 = conv3x3(planes, planes)
         self.bn2 = nn.BatchNorm2d(planes, momentum=0.1)
+        self.relu2 = nn.ReLU(inplace=True)
         self.downsample = downsample
 
     def forward(self, x):
@@ -38,7 +39,7 @@ class BasicBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = self.relu1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -47,86 +48,45 @@ class BasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.relu(out)
-
-        return out
-    
-class BasicUpsampleBlock_old(nn.Module):
-
-    def __init__(self, inplanes, planes, stride=2, residual_adj=None, use_conv_transpose=False):
-        super().__init__()
-
-        if use_conv_transpose:
-            #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
-            #kernel_size=3 would only reach a single value in some positions. Also, with kernel_size=4 the size
-            #of the output is always exactly double of the input for stride=2.
-            self.conv1 = nn.ConvTranspose2d(inplanes, planes, kernel_size=4, stride=stride, padding=1, bias=False)
-        else:
-            self.upsample = Upsample()
-            self.conv1 = conv3x3(inplanes, planes)    
-        self.bn1 = nn.BatchNorm2d(planes, momentum=0.1)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = nn.BatchNorm2d(planes, momentum=0.1)
-        self.residual_adj = residual_adj
-        self.use_conv_transpose = use_conv_transpose
-
-    def forward(self, x, output_shape):
-        identity = x
-
-        if self.use_conv_transpose:
-            out = self.conv1(x)
-            if out[-2:]!=output_shape:
-                out = F.interpolate(out, output_shape, mode='nearest')
-        else:
-            out = self.upsample(x, output_shape)
-            out = self.conv1(out)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.residual_adj is not None:
-            identity = self.residual_adj(x, out.shape[-2:])
-
-        out += identity
-        out = self.relu(out)
+        out = self.relu2(out)
 
         return out
     
 class Upsample(nn.Module):
 
-    def __init__(self, inplanes=None, planes=None, stride=2, use_conv=False, use_conv_transpose=False, mode='nearest'):
+    def __init__(self, inplanes=None, planes=None, stride=2, use_conv_transpose=False, mode='nearest'):
         super().__init__()
-
-        if use_conv or use_conv_transpose:
-            if inplanes is None or planes is None:
-                raise ValueError('When use_conv or use_conv_transpose is True, inplanes and planes must be defined.')
-        if use_conv and use_conv_transpose:
-            raise ValueError('use_conv and use_conv_transpose cannot be both True.')
 
         if use_conv_transpose:
             #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
             #kernel_size=3 would only reach a single value in some positions. Also, with kernel_size=4 the size
             #of the output is always exactly double of the input for stride=2.
-            self.conv1 = nn.ConvTranspose2d(inplanes, planes, kernel_size=4, stride=stride, padding=1, bias=False)
-        elif use_conv:
-            self.conv1 = conv1x1(inplanes, planes)    
+            self.conv = nn.Sequential(nn.ConvTranspose2d(inplanes, planes, kernel_size=4, stride=stride, padding=1, bias=False),
+                                      nn.BatchNorm2d(planes),
+                                      nn.ReLU(inplace=True)
+            )
+        else:
+            if inplanes!=planes:
+                self.conv = nn.Sequential(conv1x1(inplanes, planes),
+                                          nn.BatchNorm2d(planes),
+                                          nn.ReLU(inplace=True)
+                )
+            else:
+                self.conv = None 
             self.interpolate = Interpolate(mode)
-        self.use_conv = use_conv
+
         self.use_conv_transpose = use_conv_transpose
         self.mode = mode
 
     def forward(self, x, output_shape):
   
         if self.use_conv_transpose:
-            x = self.conv1(x)
+            x = self.conv(x)
             if x.shape[-2:]!=output_shape:
                 x = F.interpolate(x, output_shape, mode='nearest')
         else:
-            if self.use_conv:
-                x = self.conv1(x)
+            if self.conv is not None:
+                x = self.conv(x)
             x = self.interpolate(x, output_shape)
  
         return x

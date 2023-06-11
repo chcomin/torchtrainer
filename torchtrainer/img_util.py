@@ -201,13 +201,6 @@ class PerfVisualizer:
             perc = round(100*idx/num_samples)
             if idx%print_interv==0 or idx==num_samples-1:
                 print(f'Evaluating images...{100*(idx+1)/num_samples:1.0f}%', end='\r')
-                '''memstats = torch.cuda.memory_stats(device)
-                print(memstats["allocation.all.peak"],
-                memstats["allocated_bytes.all.peak"],
-                memstats["segment.all.peak"],
-                memstats["reserved_bytes.all.peak"],
-                memstats["active.all.peak"],
-                memstats["active_bytes.all.peak"])'''
 
         print(''*30, end='\r')
 
