@@ -186,7 +186,7 @@ class PerfVisualizer:
         self.model.eval()
         self.model.to(self.device)
 
-        print_interv_perc = 5   # In percent
+        print_interv_perc = 5   # In percent 
 
         num_samples = len(self.dataset)
         print_interv = max([round(print_interv_perc*num_samples/100), 1])
