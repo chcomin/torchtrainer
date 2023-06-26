@@ -3,3 +3,5 @@ __pycache__/
 *.tar
 *.zip
 */examples/data/
+*.egg-info/
+notebooks/
