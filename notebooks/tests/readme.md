@@ -1,1 +1,0 @@
-This folder contains development notebooks for testing torchtrainer.
