@@ -110,6 +110,23 @@ class Hooks:
         for hook in self.hooks:
             hook.remove()
 
+class _SimpleHook:
+    '''A simple hook for storing the activation of a layer. Used internally.
+    '''
+
+    def __init__(self, module):
+        self.activation = None
+        self.handler = module.register_forward_hook(self.create_hook())
+
+    def create_hook(self):
+        def forward_hook(module, inputs, output):
+            self.activation = output
+
+        return forward_hook
+
+    def remove_hook(self):
+        self.handler.remove()
+
 def split_modules(model, modules_to_split):
     '''Split `model` layers into different groups. Useful for freezing part of the model
     or using different learning rates.'''
@@ -243,3 +260,116 @@ def model_up_to(model, module):
     new_model = torch.nn.Sequential(OrderedDict(splitted_model))
     
     return new_model
+
+
+def receptive_field(model, module, num_channels=1, img_size=512, pixel=None):
+    '''Calculate the receptive field of a pixel in the activation map of a neural network layer.
+    Warning! This function changes the parameters of the model.
+    
+    Parameters
+    ----------
+    model: torch.nn.Module
+        The model
+    module: torch.nn.Module
+        A module in `model`. The activation map of this module will be used.
+    num_channels: int
+        The number of channels of the input
+    img_size: int
+        Image size to use as input
+    pixel: (int, int)
+        Do not use.
+
+    Returns
+    -------
+    rf: torch.tensor
+        An image containing the receptive field.
+    act: torch.tensor
+        The activation map of the module. Used for debugging purposes.
+    res: torch.tensor
+        The output of the model. Used for debugging purposes.
+    '''
+
+    model.eval()
+    with torch.no_grad():
+        for m in model.modules():
+            if isinstance(m, (nn.Conv2d, nn.Conv1d)):
+                # Set filters to 1/num_vals_filter
+                m.weight[:] = 1./m.weight[0].numel()
+                if m.bias is not None:
+                    m.bias[:] = 0.
+            if isinstance(m, nn.ReLU):
+                m.inplace = False
+            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                # Disable batchnorm
+                m.training = False
+                m.weight[:] = 1.
+                m.bias[:] = 0.
+                m.running_mean[:] = 0.
+                m.running_var[:] = 1.
+            
+    # Attach hook to get activation
+    hook = _SimpleHook(module)
+
+    x = torch.ones(1, num_channels, img_size, img_size, requires_grad=True)
+    res = model(x)
+
+    act = hook.activation
+    if pixel is None:
+        # Get pixel at the middle of the activation map
+        n_o = act.shape[-1]
+        pixel = (n_o//2, n_o//2)
+    pix_val = act[0, 0, pixel[0], pixel[1]]
+    # Calculate gradients
+    pix_val.backward()
+
+    # Gradient with respect of the input
+    rf = x.grad[0,0]
+    rf = rf/rf.max()
+    
+    return rf, act, res
+
+def receptive_field_bf(model, module, num_channels=1, img_size=512):
+    '''Calculate receptive field using brute force.'''
+
+    model.eval()
+    with torch.no_grad():
+        for m in model.modules():
+            if isinstance(m, (nn.Conv2d, nn.Conv1d)):
+                # Set filters to 1/num_vals_filter
+                m.weight[:] = 1./m.weight[0].numel()
+                if m.bias is not None:
+                    m.bias[:] = 0.
+            if isinstance(m, nn.ReLU):
+                m.inplace = False
+            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                # Disable batchnorm
+                m.training = False
+                m.weight[:] = 1.
+                m.bias[:] = 0.
+                m.running_mean[:] = 0.
+                m.running_var[:] = 1.
+            
+    # Attach hook to get activation
+    hook = _SimpleHook(module)
+
+    with torch.no_grad():
+        x = torch.zeros(1, num_channels, img_size, img_size)
+        res = model(x)
+        act = hook.activation
+        n_o = act.shape[-1]
+        pixel = (n_o//2, n_o//2)
+        pix_val_0 = act[0, 0, pixel[0], pixel[1]]
+        pix_val_diffs = []
+        for i in range(img_size//2, img_size):
+            x[0, 0, img_size//2, i] = 1
+            res = model(x)
+            x[0, 0, img_size//2, i] = 0
+
+            act = hook.activation
+            pix_val = act[0, 0, pixel[0], pixel[1]]
+            pix_val_diffs.append(pix_val-pix_val_0)
+
+    rf = torch.tensor(pix_val_diffs[1:][::-1] + pix_val_diffs)
+    rf = rf/rf.max()
+    
+    return rf, act, res
