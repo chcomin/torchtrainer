@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "torchtrainer"
 version = "0.0.1"
 authors = [
-  { name="Cesar Comin", email="author@example.com" },
+  { name="Cesar Comin"},
 ]
 description = "Helper modules for training neural networks with Pytorch."
 readme = "README.md"

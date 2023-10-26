@@ -7,14 +7,14 @@ from .layers import BasicBlock, Upsample, Concat, conv3x3, conv1x1
 
 class ResUNet(nn.Module):
 
-    def __init__(self, layers, inplanes, num_classes=2, zero_init_residual=False):
+    def __init__(self, layers, inplanes, in_channels=1, num_classes=2, zero_init_residual=False):
         """U-Net with residual blocks."""
 
         super().__init__()
 
         self.norm_layer = nn.BatchNorm2d
 
-        self.conv1 = nn.Conv2d(1, inplanes[0], kernel_size=7, stride=1, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(in_channels, inplanes[0], kernel_size=7, stride=1, padding=3, bias=False)
         self.bn1 = self.norm_layer(inplanes[0], momentum=0.1)
         self.relu = nn.ReLU(inplace=True)
 

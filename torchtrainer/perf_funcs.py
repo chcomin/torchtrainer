@@ -50,7 +50,7 @@ def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), redu
     # Assumes only values in res_labels are 0 and 1 (two classes)
     y_cases = 2*target + res_labels
     if mask is not None:
-        y_cases[mask==0] = 4
+        y_cases[mask==0] = 4  # 4 is ignored
 
     axes = list(range(1, target.ndim))   # Exclude batch dimension in sum
     tps = torch.sum(y_cases == 3, dim=axes)
