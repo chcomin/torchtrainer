@@ -6,7 +6,8 @@ from typing import Optional
 class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation gradients."""
     
-    def __init__(self, model: nn.Module, modules_to_track: Optional[list[nn.Module]] = None, agg_func: Optional[Callable] = None) -> None:
+    def __init__(self, model: nn.Module, modules_to_track: Optional[list[nn.Module]] = None, 
+                 agg_func: Optional[Callable] = None, track_relu: Optional[bool] = False) -> None:
         """Inspector class for capturing modules' parameters, gradients, activations and activation gradients.
 
         If agg_func is provided, this function will be applied to the tracked data on the same devide where the model
@@ -22,6 +23,8 @@ class Inspector:
             modules_to_track: if None, track all layers of the model. If list, track the specified layers. the layers
             are specified as, for instance, [model.layer1, model.layer2.conv1, ...]
             agg_func: function used to process the tracked data. See above for an explanation.
+            track_relu: if false (default), will not track relu activations. Tracking relu activations requires
+            changing then 
 
         Example:
             Getting all the data about a model:

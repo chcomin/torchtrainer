@@ -12,6 +12,7 @@ The main modules are:
 * [perf_funcs.py](torchtrainer/perf_funcs.py): Functions and classes for measuring the performance of a CNN. Notable metrics are IoU, f1-score, precision, recall, [soft Dice loss](https://arxiv.org/abs/1606.04797), [focal loss](https://arxiv.org/abs/1708.02002) and [COCO metrics](https://github.com/cocodataset/cocoapi/tree/master/PythonAPI/pycocotools) (only for segmentation).
 * [inspector.py](torchtrainer/inspector.py): Class for easily inspecting model parameters, activations and gradients;
 * [profiling.py](torchtrainer/profiling.py): Utilities for profiling CPU and GPU usage;
+* [model_debug.py](torchtrainer/model_debug.py): Utilities for debugging models;
 * [transforms.py](torchtrainer/transforms.py): *Deprecated*. Contains image transformation functions, useful for data augmentation. Also contains transformations for easily converting data between the numpy, pillow, pytorch and imgaug libraries. For instance,  the TransfToTensor(img, label) transform converts a 2D or 3D image and respective 2D or 3D label image to a tensor regardless if *img* and *label* are a numpy array, pillow image or imgaug object;
 
 You can install the code as an editable package by running the following command inside the torchtrainer directory (the one containing the pyproject.toml file):

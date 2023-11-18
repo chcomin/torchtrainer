@@ -4,4 +4,4 @@ __pycache__/
 *.zip
 */examples/data/
 *.egg-info/
-notebooks/
+tests/
