@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, Union
 
 class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation gradients."""
@@ -23,8 +23,7 @@ class Inspector:
             modules_to_track: if None, track all layers of the model. If list, track the specified layers. the layers
             are specified as, for instance, [model.layer1, model.layer2.conv1, ...]
             agg_func: function used to process the tracked data. See above for an explanation.
-            track_relu: if false (default), will not track relu activations. Tracking relu activations requires
-            changing then 
+            track_relu: if False (default), will not track relu activations. 
 
         Example:
             Getting all the data about a model:
@@ -43,14 +42,18 @@ class Inspector:
             def mean(data, module_name, data_type, param_name):
                 return data.mean()
 
-            inspector = Inspector(model)
+            inspector = Inspector(model, agg_func=mean)
             model(input).sum().backward()
             grad_avgs = inspector.get_grads()
         """
         
+        # No need to track these modules
         if modules_to_track is None:
-            modules = list(model.modules())
-            modules = [module for module in modules if not isinstance(module, nn.ModuleList)]
+            ignore_modules = (nn.ModuleList,nn.ModuleDict,nn.Sequential)
+            if not track_relu:
+                ignore_modules += (nn.ReLU,)
+            modules = model.modules()
+            modules = [module for module in modules if not isinstance(module, ignore_modules)]
             modules_to_track = modules
 
         if agg_func is None:
@@ -62,7 +65,8 @@ class Inspector:
         self.model = model
         self.model_name = model._get_name().lower()
         self.dict_module_to_str = self._create_module_dict()
-        self.dict_model_stats = self._create_stats_dict()       
+        self.model_acts = {'act':[], 'act_grad':[]}       
+        
         self.forward_hook = None
         self.backward_hook = None
         self.act_hook_handles = []
@@ -72,74 +76,80 @@ class Inspector:
         
         self._create_hooks()
 
-    def get_params(self, out: Optional[dict] = None) -> dict:
-        """Get model parameters. The returned dictionary has the format 
-        {layer_name: {param_name: data,...},...}.
+    def get_params(self, return_dict: Optional[bool] = False) -> Union[dict,list]:
+        """Get model parameters. If return_dict is True, the returned dictionary has the format 
+        {layer_name: {param_name: data,...},...}. If return_dict is False, the returned list has the
+        format [(layer_name.param_name, data),...].
         
         Args:
-            out: a dictionary of a previous call to this method can be provided, in which case
-            the data is copied to it. This helps avoid an additional copy of the data.
+            return_dict: if false, returns a list.
         """
-        return self._capture_params_grads(out, 'param')
+        return self._capture_params_grads('param', return_dict)
         
-    def get_grads(self, out: Optional[dict] = None) -> dict:
-        """Get model parameter gradients. The returned dictionary has the format 
-        {layer_name: {param_name: data,...},...}.
+    def get_grads(self, return_dict: Optional[bool] = False) -> Union[dict,list]:
+        """Get model parameters gradients. If return_dict is True, the returned dictionary has the format 
+        {layer_name: {param_name: data,...},...}. If return_dict is False, the returned list has the
+        format [(layer_name.param_name, data),...].
         
         Args:
-            out: a dictionary of a previous call to this method can be provided, in which case
-            the data is copied to it. This helps avoid an additional copy of the data.
+            return_dict: if false, returns a list.
         """
 
-        return self._capture_params_grads(out, 'grad')
+        return self._capture_params_grads('grad', return_dict)
 
-    def get_activations(self) -> dict:
-        """Get model activations. The returned dictionary has the format 
-        {layer_name: data,...}.
-        """
+    def get_activations(self) -> list:
+        """Get model activations. The returned list has the format [(layer_name, data),...]."""
         
-        return self._get_dict_data('act')
+        return self.model_acts['act']
 
-    def get_act_grads(self) -> dict:
-        """Get the gradient of model activations. The returned dictionary has the format 
-        {layer_name: data,...}.
+    def get_act_grads(self) -> list:
+        """Get the gradient of model activations. The returned list has the 
+        format [(layer_name, [grad1, grad2,...]),...].
         """
 
-        return self._get_dict_data('act_grad')
+        return self.model_acts['act_grad']
 
-    def start_tracking_activations(self) -> None:
+    def start_tracking_activations(self, erase: Optional[bool]=True) -> None:
         '''Start tracking model activations. Warning, tracking activations leads to slower model execution.`
         When a call to model.forward() is executed, the activations are saved internally and can be retrieved
-         using the `get_activations()` method.'''
+        using the `get_activations()` method.
+        
+        Args:
+            erase: if True, the internally saved activations are erased.
+        '''
 
-        if self.tracking_activations:
-            print('Already tracking activations')
-        else:
-            self.tracking_activations = True
-            self._add_activation_hooks()
+        self.tracking_activations = True
+        if erase:
+            self.model_acts['act'] = []
+        self._add_activation_hooks()
 
-    def start_tracking_act_grads(self) -> None:
+    def start_tracking_act_grads(self, erase: Optional[bool]=True) -> None:
         '''Start tracking the gradients of the activations. Warning, tracking activation gradients leads to slower model execution.
         When a call to model.forward() is executed, the gradients are saved internally and can be retrieved
         using the `get_act_grads()` method.
 
-        Note: this method does not work for in-place operations.
+        Note: tracking activation gradients do not work for models that do inplace
+        operations. For instance, x += tensor is an inplace operation.
         '''
 
-        if self.tracking_act_grads:
-            print('Already tracking activation gradients')
-        else:
-            self.tracking_act_grads = True
-            self._add_act_grad_hooks()
+        self.tracking_act_grads = True
+        if erase:
+            self.model_acts['act_grad'] = []
+
+        self._add_act_grad_hooks()
           
     def stop_tracking_activations(self) -> None:
         '''Stop tracking model data.'''
+
+        self.tracking_activations = False
 
         for hook in self.act_hook_handles:
             hook.remove()
 
     def stop_tracking_act_grads(self) -> None:
         '''Stop tracking model data.'''
+
+        self.tracking_act_grads = False
 
         for hook in self.act_grad_hook_handles:
             hook.remove()
@@ -171,31 +181,18 @@ class Inspector:
                 dict_module_to_str[module] = name
         
         return dict_module_to_str
-    
-    def _create_stats_dict(self) -> dict:
-        """Create dictionary for saving activation data."""
-        
-        dict_model_stats = {}
-        for module, module_name in self.dict_module_to_str.items():
-            params = list(module.named_parameters(recurse=False))
-            dict_model_stats[module_name] = {
-                'act':None, 
-                'act_grad':None
-            }
-            
-        return dict_model_stats
-    
+       
     def _create_hooks(self) -> None:
         """Create hooks for tracking activations."""
 
         def forward_hook(module, inputs, output):
             name = self.dict_module_to_str[module]
             #Module activations
-            self._add_to_dict(output.detach(), name, 'act')
+            self._add_to_list(output.detach(), name, 'act')
 
         def backward_hook(module, grad_input, grad_output):
             name = self.dict_module_to_str[module]
-            self._add_to_dict(list(grad_output), name, 'act_grad')
+            self._add_to_list(list(grad_output), name, 'act_grad')
           
         self.forward_hook = forward_hook
         self.backward_hook = backward_hook
@@ -221,47 +218,58 @@ class Inspector:
         
         self.act_grad_hook_handles = act_grad_hook_handles
 
-    def _capture_params_grads(self, out: Optional[dict] = None, which: str = 'param') -> dict:
+    def _capture_params_grads(self, which: str = 'param', 
+                              return_dict: Optional[bool] = False) -> Union[dict,list]:
         """Get model parameters or gradients. `which` can be 'param' or 'grad'."""
 
-        if out is None:
-            out = {}
-            create_new = True
-        else:
-            create_new = False
-
+        out = {}
         for module, module_name in self.dict_module_to_str.items():
-            if create_new and len(list(module.named_parameters(recurse=False)))>0:
+            children = list(module.named_parameters(recurse=False))
+            if len(children)>0:
                 out[module_name] = {}
-            for param_name, param in module.named_parameters(recurse=False):
+            for param_name, param in children:
                 if which=='param':
                     param = param.detach()
                 elif which=='grad':
                     param = param.grad
                 res = self.agg_func(param, module_name, which, param_name)
-                if create_new:
-                    out[module_name][param_name] = res.to('cpu', copy=True)
-                else:
-                    out[module_name][param_name].copy_(res)
+                out[module_name][param_name] = res.to('cpu', copy=True)
+
+        if not return_dict:
+            out_list = []
+            for module_name, children in out.items():
+                for param_name, param in children.items(): 
+                    out_list.append((f'{module_name}.{param_name}', param))
+            out = out_list
 
         return out  
                 
-    def _get_dict_data(self, key: str) -> dict:
-        """Get activations or activation gradients. `key` can be 'act' or 'act_grad'."""
+    def _add_to_list(self, data: torch.Tensor, module_name: str, data_type: str) -> None:
+        '''Receives activation data and save to list in the cpu. If the 
+        model is being trained on the GPU, `data` resides in the GPU.
+        `data_type can be 'act' or 'act_grad'.'''
+        
+        model_acts = self.model_acts
+        if data_type=='act':
+            data = [data]
 
-        out_dict = {}
-        for module_name, module_data in self.dict_model_stats.items():
-            out_dict[module_name] = module_data[key]
+        saved_data = []
+        for tensor in data:
+            res = self.agg_func(tensor, module_name, data_type)
+            saved_data.append(res.to('cpu', copy=True))
 
-        return out_dict
-           
-    def _add_to_dict(self, data: torch.Tensor, module_name: str, data_type: str) -> None:
+        if data_type=='act':
+            saved_data = saved_data[0]
+
+        model_acts[data_type].append((module_name, saved_data))
+
+    def _add_to_dict_old(self, data: torch.Tensor, module_name: str, data_type: str) -> None:
         '''Receives activation data and save to dictionary in the cpu. If the 
         model is being trained on the GPU, `data` resides in the GPU.
         `data_type can be 'act' or 'act_grad'.'''
         
-        dict_model_stats = self.dict_model_stats
-        saved_data = dict_model_stats[module_name][data_type]
+        list_model_stats = self.list_model_stats
+        saved_data = list_model_stats[module_name][data_type]
         create_new = saved_data is None    
         # saved_data can be None, a tensor or a list
         # data can be a tensor or a list     
@@ -286,7 +294,7 @@ class Inspector:
                 # Recover format of Pytorch hooks
                 saved_data = saved_data[0]
 
-            dict_model_stats[module_name][data_type] = saved_data
+            list_model_stats[module_name][data_type] = saved_data
 
 def agg_func_stats(data, module_name, data_type, param_name=None):
     """Example aggregator function for storing some statistics about the model."""
