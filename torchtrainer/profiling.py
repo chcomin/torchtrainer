@@ -1,11 +1,17 @@
 import torch
-import fvcore.nn
 from torch.profiler import profile as pt_profile, ProfilerActivity
 from contextlib import nullcontext
 import copy
 import time
 import torch.nn as nn
 from typing import Callable
+
+try:
+    import fvcore.nn
+except ModuleNotFoundError:
+    HAS_FVCORE = False
+else:
+    HAS_FVCORE = True
 
 def profile_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool = True, call_backward: bool = False, 
                   sort_by: str = 'cuda_time_total', device: str = 'cuda', use_float16: bool = False) -> str:
@@ -74,6 +80,10 @@ def profile_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool =
 def model_info(model: nn.Module, input_shape: tuple[int,...]) -> str:
     '''Prints number of floating points, activations and parameters shapes'''
 
+    if not HAS_FVCORE:
+        print("The fvcore package is not installed. Unable to count flops and activations.")
+        return
+
     # Avoid changing the device of original model
     model = copy.deepcopy(model)
     model.to('cpu')
@@ -126,6 +136,11 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     else:
         dtype=torch.float16
 
+    if return_model_info and not HAS_FVCORE:
+        print("The fvcore package is not installed. Unable to count flops and activations.")
+
+        
+
     model = copy.deepcopy(model)    
 
     input = torch.rand(input_shape, device=device)
@@ -136,14 +151,14 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     else:
         cm = nullcontext()
 
+    num_params = 0
+    acts = 0
+    flops = 0
     if return_model_info:
         num_params = sum([p.numel() for p in model.parameters()])
-        acts = fvcore.nn.ActivationCountAnalysis(model, input).total()
-        flops = fvcore.nn.FlopCountAnalysis(model, input).total()
-    else:
-        num_params = 0
-        acts = 0
-        flops = 0
+        if HAS_FVCORE:
+            acts = fvcore.nn.ActivationCountAnalysis(model, input).total()
+            flops = fvcore.nn.FlopCountAnalysis(model, input).total()
 
     gpu_start = torch.cuda.Event(enable_timing=True)
     gpu_end = torch.cuda.Event(enable_timing=True) 
