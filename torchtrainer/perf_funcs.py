@@ -6,15 +6,13 @@ import torch
 import torch.nn.functional as F
 
 @torch.no_grad()
-def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
-    '''Calculate some performance metrics for segmentation results. Assumes background has value 0 and
-    the segmentation has value 1. If more than one image in batch, returns a single value representing the
-    average performance for all images in the batch.
+def segmentation_accuracy2(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
+    '''Calculate some performance metrics for two-class segmentation results. Assumes background has value 0 and
+    the segmentation has value 1.
 
     Possible measurements are:
         prec : precision
         rec : recall
-        f1 : f1 score
         iou : intersection over union
 
     Parameters
@@ -24,82 +22,74 @@ def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), redu
     target : torch.Tensor
         Target tensor. Must have shape (batch size, height, width)
     meas : str or list of str
-        Name of the desired measurements from the set {'iou', 'f1', 'prec', 'rec'}
+        Name of the desired measurements from the set {'iou', 'prec', 'rec'}
     reduce_batch : bool
         If True, a single value is returned for the batch for each measurement. If False, returns one
         value for each item in the batch for each measurement.
     mask : int
-        Values where mask is 0 will be ignored.
+        Values where mask is 0 will be ignored. Must have shape (batch size, height, width)
 
     Returns
     -------
     out_mea : torch.Tensor or dict
         The calculated values. If `meas` contains a single measurement, the returned value is a tensor
-        with a single value if `reduce_batch` is True or a tensor array of size target.shape[0] if
+        with a single value if `reduce_batch` is True or a tensor of size target.shape[0] if
         `reduce_batch` is False. If `meas` is a list, the function returns a dictionary keyed by
         the metrics names. The values for each item depend on `reduce_batch` as above.
     '''
 
     if isinstance(meas, str):
-        meas = (meas)
+        meas = (meas,)
 
-    beta = torch.tensor(1.)
+    bs = input.shape[0]
+    eps = 1e-7
 
     res_labels = torch.argmax(input, dim=1)
+    # Convert to bool
+    result = res_labels==1
+    target = target==1
 
-    # Assumes only values in res_labels are 0 and 1 (two classes)
-    y_cases = 2*target + res_labels
+    # Flatten tensors
+    result = result.reshape(bs, -1)
+    target = target.reshape(bs, -1)
+
+    # tp, fp and fn for each pixel
+    tps_pixel = target & result
+    fps_pixel = ~target & result
+    fns_pixel = target & ~result
+
+    # Mask values
     if mask is not None:
-        y_cases[mask==0] = 4  # 4 is ignored
+        mask = (mask>0).reshape(bs, -1)
+        tps_pixel &= mask
+        fps_pixel &= mask
+        fns_pixel &= mask
 
-    axes = list(range(1, target.ndim))   # Exclude batch dimension in sum
-    tps = torch.sum(y_cases == 3, dim=axes)
-    fps = torch.sum(y_cases == 1, dim=axes)
-    #tns = torch.sum(y_cases == 0, dim=axes)  # not necessary
-    fns = torch.sum(y_cases == 2, dim=axes)
+    # Sum for all pixels
+    tps = tps_pixel.sum(dim=1)
+    fps = fps_pixel.sum(dim=1)
+    fns = fns_pixel.sum(dim=1)
 
     if reduce_batch:
+        # Reduce before calculating metrics. This gives more weight to samples with more pixels
         tps = tps.sum(dim=0, keepdim=True)
         fps = fps.sum(dim=0, keepdim=True)
-        #tns = tns.sum(dim=0, keepdim=True)  # not necessary
         fns = fns.sum(dim=0, keepdim=True)
 
-    precisions = torch.zeros(len(tps))
-    recalls = torch.zeros(len(tps))
-    f1s = torch.zeros(len(tps))
-    ious = torch.zeros(len(tps))
+    n = len(tps)
+    out_meas = {mea:torch.zeros(n) for mea in meas}
+    meas = set(meas)
     for idx, (tp, fp, fn) in enumerate(zip(tps, fps, fns)):
-        if tp!=0 or fp!=0:
-            precision = tp / (tp + fp)
-        else:
-            precision = 0.
-        if tp!=0 or fn!=0:
-            recall = tp / (tp + fn)
-        else:
-            recall = 0.
-        if precision!=0 or recall!=0:
-            f1 = (1 + beta ** 2) * precision * recall / (((beta ** 2) * precision) + recall)
-        else:
-            f1 = 0.
-        if tp!=0 or fp!=0 or fn!=0:
-            iou = tp / (tp + fp + fn)
-        else:
-            iou = 0.
 
-        precisions[idx] = precision
-        recalls[idx] = recall
-        f1s[idx] = f1
-        ious[idx] = iou
-
-    out_meas = {}
-    if 'iou' in meas:
-        out_meas['iou'] = ious
-    if 'f1' in meas:
-        out_meas['f1'] = f1s
-    if 'prec' in meas:
-        out_meas['prec'] = precisions
-    if 'rec' in meas:
-        out_meas['rec'] = recalls
+        if 'prec' in meas:
+            precision = (tp + eps) / (tp + fp + eps)
+            out_meas['prec'][idx] = precision
+        if 'rec' in meas:
+            recall = (tp + eps) / (tp + fn + eps)
+            out_meas['rec'][idx] = recall
+        if 'iou' in meas:
+            iou = (tp + eps) / (tp + fp + fn + eps)
+            out_meas['iou'][idx] = iou
 
     if reduce_batch:
         for k, v in out_meas.items():
