@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 
 @torch.no_grad()
-def segmentation_accuracy2(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
+def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
     '''Calculate some performance metrics for two-class segmentation results. Assumes background has value 0 and
     the segmentation has value 1.
 
