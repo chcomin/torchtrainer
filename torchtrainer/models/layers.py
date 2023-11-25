@@ -22,6 +22,39 @@ def ntuple(x, n):
     return tuple([x]*n)
 
 class BasicBlock(nn.Module):
+    '''Residual block.'''
+
+    def __init__(self, in_channels, out_channels, stride=1, residual_adj=None):
+        super().__init__()
+
+        self.conv1 = conv3x3(in_channels, out_channels, stride)
+        self.bn1 = nn.BatchNorm2d(out_channels, momentum=0.1)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(out_channels, out_channels)
+        self.bn2 = nn.BatchNorm2d(out_channels, momentum=0.1)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.residual_adj = residual_adj
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu1(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.residual_adj is not None:
+            identity = self.residual_adj(x)
+
+        out += identity
+        out = self.relu2(out)
+
+        return out
+    
+class BasicBlockOld(nn.Module):
+    '''Residual block. Some attributes in this class have nonintuitive names. These names were changed in class BasicBlock.'''
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super().__init__()
@@ -53,6 +86,48 @@ class BasicBlock(nn.Module):
         return out
     
 class Upsample(nn.Module):
+    '''Upsamples an input and optionally adjusts the number of channels.'''
+
+    def __init__(self, in_channels=None, out_channels=None, stride=2, use_conv_transpose=False, mode='nearest'):
+        super().__init__()
+
+        if use_conv_transpose:
+            #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
+            #kernel_size=3 would only reach a single value in some positions. Also, with kernel_size=4 the size
+            #of the output is always exactly double of the input for stride=2.
+            self.conv = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False),
+                                      nn.BatchNorm2d(out_channels),
+                                      nn.ReLU(inplace=True)
+            )
+        else:
+            if in_channels!=out_channels:
+                self.channel_adj = nn.Sequential(conv1x1(in_channels, out_channels),
+                                          nn.BatchNorm2d(out_channels),
+                                          nn.ReLU(inplace=True)
+                )
+            else:
+                self.channel_adj = None 
+            self.interpolate = Interpolate(mode)
+
+        self.use_conv_transpose = use_conv_transpose
+        self.mode = mode
+
+    def forward(self, x, output_shape):
+  
+        if self.use_conv_transpose:
+            x = self.conv(x)
+            if x.shape[-2:]!=output_shape:
+                x = F.interpolate(x, output_shape, mode='nearest')
+        else:
+            if self.channel_adj is not None:
+                x = self.channel_adj(x)
+            x = self.interpolate(x, output_shape)
+ 
+        return x
+    
+class UpsampleOld(nn.Module):
+    '''Upsamples an input and optionally adjusts the number of channels. Some attributes in this class have
+    nonintuitive names. These names were changed in class Upsample.'''
 
     def __init__(self, inplanes=None, planes=None, stride=2, use_conv_transpose=False, mode='nearest'):
         super().__init__()
@@ -90,8 +165,10 @@ class Upsample(nn.Module):
             x = self.interpolate(x, output_shape)
  
         return x
-    
+
 class Interpolate(nn.Module):
+    '''Layer that receives two inputs when called: x and output_shape. The layer interpolates the input
+    to the desired output.'''
 
     def __init__(self, mode='nearest'):
         super().__init__()

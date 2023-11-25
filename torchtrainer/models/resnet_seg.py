@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-from .layers import BasicBlock, conv3x3, conv1x1
+from .layers import BasicBlockOld, conv3x3, conv1x1
 
 class ResNetSeg(nn.Module):
     """ResNetModel for segmentation. Model adapted from Pytorch."""
@@ -30,7 +30,7 @@ class ResNetSeg(nn.Module):
 
         downsample = None
         norm_layer = self.norm_layer
-        block = BasicBlock
+        block = BasicBlockOld
 
         if inplanes != planes:
             downsample = nn.Sequential(
@@ -56,7 +56,7 @@ class ResNetSeg(nn.Module):
 
         if zero_init_residual:
             for m in self.modules():
-                if isinstance(m, BasicBlock):
+                if isinstance(m, BasicBlockOld):
                     nn.init.constant_(m.bn2.weight, 0)
 
     def forward(self, x):
