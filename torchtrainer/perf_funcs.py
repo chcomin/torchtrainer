@@ -4,6 +4,7 @@ import scipy.ndimage as ndi
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.nn.modules.loss import _Loss
 
 @torch.no_grad()
 def segmentation_accuracy(input, target, meas=('iou', 'prec', 'rec', 'f1'), reduce_batch=True, mask=None):
@@ -238,47 +239,37 @@ def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction='mea
 
 class FocalLoss(torch.nn.Module):
     
-    def __init__(self, gamma=2., alpha=(1., 1.), reduction='mean'):
+    def __init__(self, weight=None, gamma=2., ignore_index=-100, reduction='mean'):
         super().__init__()
         
-        if not isinstance(alpha, torch.Tensor):
-            alpha = torch.tensor(alpha)
+        if weight is None:
+            weight = [1., 1.]
         
+        self.weight = weight
         self.gamma = gamma
-        self.alpha = alpha
+        self.ignore_index = ignore_index
         self.reduction = reduction
         
     def forward(self, input, target):
         
-        return focal_loss(input, target, self.alpha, self.gamma, self.reduction)
-        
-class FocalLossRaw(FocalLoss):
+        return focal_loss(input, target, self.weight, self.gamma, self.ignore_index, self.reduction)
+          
+def focal_loss(input, target, weight, gamma, ignore_index=-100, reduction='mean'):
     
-    def __init__(self, gamma=2., alpha=(1., 1.), reduction='mean', eps=1e-8):
-        """Same as `FocalLoss` but receives raw scores and applies a softmax function
-        to obtain probabilities."""
+    logpt = F.cross_entropy(input, target, ignore_index=ignore_index, reduction='none')
+    pt = torch.exp(-logpt)
 
-        super().__init__(gamma, alpha, reduction)
-        
-        self.eps = eps
-                
-    def forward(self, input, target):
-        
-        probs = F.softmax(input, dim=1) + self.eps
-        return super().forward(probs, target)
+    focal_term = (1.0 - pt).pow(gamma)
+    loss = focal_term * logpt
+
+    loss *= weight[0]*(1-target) + weight[1]*target
     
-def focal_loss(probs, target, alpha, gamma, reduction='mean'):
-    
-    pt = torch.gather(probs, 1, target.unsqueeze(1)).squeeze()
-    alpha = alpha[target]        # Broadcast alpha values
-    
-    loss_all = -alpha*(1-pt)**gamma*pt.log()   
     if reduction == 'none':
-        loss = loss_all
+        pass
     elif reduction == 'mean':
-        loss = torch.mean(loss_all)
+        loss = loss.mean()
     elif reduction == 'sum':
-        loss = torch.sum(loss_all)
+        loss = loss.sum()
         
     return loss
 
