@@ -5,10 +5,26 @@ from torch import nn
 from .layers import BasicBlock, BasicBlockOld, Upsample, UpsampleOld, Concat, conv3x3, conv1x1
 
 class ResUNetV2(nn.Module):
+    """U-Net with residual blocks. Please see the Models notebook for an in-depth explanation of the parameters.
+    
+    Parameters
+    ----------
+    blocks_per_encoder_stage : list
+        Number of residual blocks for each stage of the encoder.
+    blocks_per_decoder_stage : list
+        Number of residual blocks for each stage of the decoder. Must have the same size as blocks_per_encoder_stage`.
+    channels_per_stage : list
+        Number of channels of each stage. Must have the same size as blocks_per_encoder_stage`.
+    in_channels : int
+        Number of channels of the input image.
+    num_classes : int
+        Number of classes for the output.
+    zero_init_residual : bool
+        If True, initializes each residual block so that the non-residual path outputs 0. That is, at the beginning,
+        the residual block acts as an identity layer.
+    """
 
     def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, in_channels=1, num_classes=2, zero_init_residual=False):
-        """U-Net with residual blocks."""
-
         super().__init__()
 
         num_stages = len(blocks_per_encoder_stage)
