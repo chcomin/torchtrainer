@@ -3,6 +3,7 @@
 import torch
 from torch import nn
 from .layers import BasicBlock, BasicBlockOld, Upsample, UpsampleOld, Concat, conv3x3, conv1x1
+from..module_util import Hook
 
 class ResUNetV2(nn.Module):
     """U-Net with residual blocks. Please see the Models notebook for an in-depth explanation of the parameters.
@@ -266,3 +267,67 @@ class ResUNet(nn.Module):
 
         return x  
         
+class DeepSupervision:
+    """Capture activations of intermediate layers of the ResUnet. 
+    Example usage:
+
+    ds = DeepSupervision(model)
+    output = model(x)
+    acts = ds.get_activations()
+
+    `acts` is a dictionary with (layer_name: activation) pairs.
+    """
+
+    def __init__(self, model):
+
+        module_names = self.get_main_resunet_modules(model)
+        modules = []
+        for name in module_names:
+            modules.append(model.get_submodule(name))
+        hooks = self.attach_hooks(modules)
+
+        self.model = model
+        self.module_names = module_names
+        self.modules = modules
+        self.hooks = hooks
+
+    def get_activations(self):
+
+        acts = {}
+        for name, hook in zip(self.module_names, self.hooks):
+            acts[name] = hook.activation
+
+        return acts
+
+    def get_main_resunet_modules(self, model):
+        """Get all residual blocks of the ResUNet model.
+
+        Args:
+            model (torch.nn.Module): The model.
+
+        Returns:
+            list: List of residual blocks
+        """
+
+        from torchtrainer.models.layers import BasicBlock
+
+        module_names = ['stage_input']
+        for name, module in model.named_modules():
+            if isinstance(module, BasicBlock):
+                module_names.append(name)
+
+        return module_names
+
+    def attach_hooks(self, modules):
+        '''Attach forward hooks to a list of modules to get activations.'''
+
+        hooks = []
+        for module in modules:
+            hooks.append(Hook(module))
+
+        return hooks
+
+    def remove_hooks(self):
+
+        for hook in self.hooks:
+            hook.remove()

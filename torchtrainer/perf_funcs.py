@@ -310,7 +310,44 @@ def dice_loss(input, target, squared=False, eps=1e-8):
         target = target**2
     denominator = torch.sum(input_1) + torch.sum(target)
 
-    return 1 - (numerator + eps)/(denominator + eps)    
+    return 1 - (numerator + eps)/(denominator + eps)  
+
+def cl_score(v, s):
+    """[this function computes the skeleton volume overlap]
+
+    Args:
+        v ([bool]): [image]
+        s ([bool]): [skeleton]
+
+    Returns:
+        [float]: [computed skeleton volume intersection]
+    """
+    return (v*s).sum()/s.sum()
+
+def cl_dice(input, target):
+    """[this function computes the cldice metric]
+    """
+
+    from skimage.morphology import skeletonize
+
+    if input.ndim!=4:
+        raise ValueError(f"Expected input to have dimension 4, but got tensor with sizes {input.shape}")
+    if target.ndim!=3:
+        raise ValueError(f"Expected target to have dimension 3, but got tensor with sizes {target.shape}")
+
+    bs = input.shape[0]
+    res_labels = torch.argmax(input, dim=1)
+
+    res_labels = np.array(res_labels.to('cpu')).astype(np.uint8)
+    target = np.array(target.to('cpu')).astype(np.uint8)
+    cl_dice_per_img = np.zeros(bs)
+    for idx in range(bs):
+        tprec = cl_score(res_labels[idx],skeletonize(target[idx]))
+        tsens = cl_score(target[idx],skeletonize(res_labels[idx]))
+        cl_dice_per_img[idx] = 2*tprec*tsens/(tprec+tsens)  
+    cl_dice_batch = cl_dice_per_img.mean()
+
+    return cl_dice_batch
 
 class LabelSmoothingLoss(torch.nn.Module):
     def __init__(self, num_classes, smoothing=0.0, weight=None, reduction='mean'):
