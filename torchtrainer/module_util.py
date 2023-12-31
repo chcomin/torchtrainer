@@ -4,6 +4,7 @@ from functools import partial
 from torch import nn
 from collections import OrderedDict
 import torch
+import copy
 
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
@@ -88,6 +89,11 @@ class ReceptiveField:
     rf: torch.tensor
         An image containing the receptive field.
     '''
+
+    conv_layers = (nn.Conv1d, nn.Conv2d, nn.Conv3d)
+    conv_transp_layers = (nn.ConvTranspose1d, nn.ConvTranspose2d, nn.ConvTranspose3d)
+    norm_layers = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
+
     def __init__(self, model, device='cuda'):
 
         self.model_or = model
@@ -100,22 +106,49 @@ class ReceptiveField:
 
         model.to(self.device)
         model.eval()
+
+        # Get names of modules containing parameters or buffers
+        '''modules_with_params = set()
+        for name, _ in model.named_parameters():
+            mod_name = '.'.join(name.split('.')[:-1])
+            modules_with_params.add(mod_name)
+
+        for name, _ in model.named_buffers():
+            mod_name = '.'.join(name.split('.')[:-1])
+            modules_with_params.add(mod_name)'''
+
         with torch.no_grad():
-            for m in model.modules():
-                if isinstance(m, (nn.Conv2d, nn.Conv1d)):
-                    # Set filters to 1/num_vals_filter
-                    m.weight[:] = 1./m.weight[0].numel()
-                    if m.bias is not None:
-                        m.bias[:] = 0.
-                if isinstance(m, nn.ReLU):
-                    m.inplace = False
-                if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            for name, module in model.named_modules():
+                if isinstance(module, self.conv_layers):
+                    # Set filters to 1/num_vals_filter. Assumes filters have the same
+                    # size in all dimensions
+                    ks = module.kernel_size[0]
+                    dim = len(module.kernel_size)
+                    n = ks**dim
+                    module.weight[:] = 1./n
+                    if module.bias is not None:
+                        module.bias[:] = 0.
+                #if isinstance(module, nn.ReLU):
+                #    module.inplace = False
+                elif isinstance(self.conv_transp_layers):
+                    ks = module.kernel_size[0]
+                    stride = module.stride[0]
+                    dim = len(module.kernel_size)
+                    # Effective number of input features is ks//stride for each dimension
+                    n = (ks//stride)**dim
+                    module.weight[:] = 1./n
+                    if module.bias is not None:
+                        module.bias[:] = 0.
+                elif isinstance(module, self.norm_layers):
                     # Disable batchnorm
-                    m.training = False
-                    m.weight[:] = 1.
-                    m.bias[:] = 0.
-                    m.running_mean[:] = 0.
-                    m.running_var[:] = 1.
+                    module.training = False
+                    module.weight[:] = 1.
+                    module.bias[:] = 0.
+                    module.running_mean[:] = 0.
+                    module.running_var[:] = 1.
+                elif len(module.parameters(recurse=False))>0:
+                    # Layer has parameter but is not one of the modules above
+                    print(f'Warning, module {name} was not recognized.')
 
     def receptive_field(self, module_name, num_channels=1, img_size=(512, 512), pixel=None):
         '''Calculate the receptive field of a pixel in the activation map of a neural network layer.
@@ -155,10 +188,9 @@ class ReceptiveField:
         # Calculate gradients
         pix_val.backward()
 
-        # Gradient with respect of the input
+        # Gradient with respect to the input
         rf = x.grad[0,0]
 
-        #model.load_state_dict(model_state)
         rf = rf/rf.max()
         rf = rf.to("cpu")
 
@@ -176,6 +208,7 @@ class ReceptiveField:
         r0, c0, r1, c1 = r0.item(), c0.item(), r1.item(), c1.item()
         bbox = (r0, c0, r1, c1)
 
+        # Calculate position of the maximum
         inds = torch.nonzero(rf==rf.max())
         r, c = inds.float().mean(axis=0)
         center = (int(r.item()), int(c.item()))
