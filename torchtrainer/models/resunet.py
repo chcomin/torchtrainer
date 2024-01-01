@@ -25,7 +25,7 @@ class ResUNetV2(nn.Module):
         the residual block acts as an identity layer.
     """
 
-    def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, in_channels=1, num_classes=2, zero_init_residual=False):
+    def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, in_channels=1, num_classes=2, upsample_strategy='interpolation', zero_init_residual=False):
         super().__init__()
 
         num_stages = len(blocks_per_encoder_stage)
@@ -36,6 +36,7 @@ class ResUNetV2(nn.Module):
 
         self.norm_layer = nn.BatchNorm2d
         self.residual_block = BasicBlock
+        self.upsample_strategy = upsample_strategy
         
         self.stage_input = nn.Sequential(
             nn.Conv2d(in_channels, channels_per_stage[0], kernel_size=7, stride=1, padding=3, bias=False),
@@ -97,7 +98,7 @@ class ResUNetV2(nn.Module):
             norm_layer(out_channels, momentum=0.1),
         )
 
-        upsample = Upsample(in_channels, out_channels)
+        upsample = Upsample(in_channels, out_channels, upsample_strategy=self.upsample_strategy)
         layers = []
         # 2*out_channels is used here because the first upsample block concatenates the output of a downsample block
         layers.append(block(2*out_channels, out_channels, 1, residual_adj)) 
@@ -266,7 +267,7 @@ class ResUNet(nn.Module):
         x = self.conv_output(x)     
 
         return x  
-        
+
 class DeepSupervision:
     """Capture activations of intermediate layers of the ResUnet. 
     Example usage:
@@ -280,7 +281,7 @@ class DeepSupervision:
 
     def __init__(self, model):
 
-        module_names = self.get_main_resunet_modules(model)
+        module_names = get_main_resunet_modules(model, depth=2)
         modules = []
         for name in module_names:
             modules.append(model.get_submodule(name))
@@ -299,25 +300,6 @@ class DeepSupervision:
 
         return acts
 
-    def get_main_resunet_modules(self, model):
-        """Get all residual blocks of the ResUNet model.
-
-        Args:
-            model (torch.nn.Module): The model.
-
-        Returns:
-            list: List of residual blocks
-        """
-
-        from torchtrainer.models.layers import BasicBlock
-
-        module_names = ['stage_input']
-        for name, module in model.named_modules():
-            if isinstance(module, BasicBlock):
-                module_names.append(name)
-
-        return module_names
-
     def attach_hooks(self, modules):
         '''Attach forward hooks to a list of modules to get activations.'''
 
@@ -331,3 +313,30 @@ class DeepSupervision:
 
         for hook in self.hooks:
             hook.remove()
+
+def get_main_resunet_modules(model, depth=1):
+    """Get main layers of the ResUNet model.
+
+    Args:
+        model (torch.nn.Module): The model.
+        depth (int): When depth=1, each stage of the encoder and decoder is returned.
+        When depth=2, all residual blocks of the model are returned.
+
+    Returns:
+        list: List of modules
+    """
+
+    module_names = ['stage_input']
+    if depth==1:
+        for name in model.encoder.keys():
+            module_names.append(f'encoder.{name}')
+        for name in model.decoder.keys():
+            module_names.append(f'decoder.{name}.2')
+    elif depth==2:
+        from torchtrainer.models.layers import BasicBlock
+        for name, module in model.named_modules():
+            if isinstance(module, BasicBlock):
+                module_names.append(name)  
+    module_names.append('conv_output')
+
+    return module_names

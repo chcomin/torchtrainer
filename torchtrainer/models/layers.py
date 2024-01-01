@@ -86,12 +86,17 @@ class BasicBlockOld(nn.Module):
         return out
     
 class Upsample(nn.Module):
-    '''Upsamples an input and optionally adjusts the number of channels.'''
+    '''Upsamples an input and optionally adjusts the number of channels.
+    upsample_strategy can be 'interpolation', 'conv_transpose' or 'kernel'.
+    '''
 
-    def __init__(self, in_channels=None, out_channels=None, stride=2, use_conv_transpose=False, mode='nearest'):
+    def __init__(self, in_channels=None, out_channels=None, stride=2, upsample_strategy='interpolation', mode='nearest'):
         super().__init__()
 
-        if use_conv_transpose:
+        if upsample_strategy=='kernel' and stride!=2:
+            raise ValueError('stride must be 2 for kernel upsample strategy.')
+
+        if upsample_strategy=='conv_transpose':
             #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
             #kernel_size=3 would only reach a single value in some positions. Also, with kernel_size=4 the size
             #of the output is always exactly double of the input for stride=2.
@@ -107,21 +112,28 @@ class Upsample(nn.Module):
                 )
             else:
                 self.channel_adj = None 
-            self.interpolate = Interpolate(mode)
+            if upsample_strategy=='interpolation':
+                self.interpolate = Interpolate(mode)
+            elif upsample_strategy=='kernel':    
+                self.interpolate = InterpolateConv()
 
-        self.use_conv_transpose = use_conv_transpose
+        self.upsample_strategy = upsample_strategy
         self.mode = mode
 
     def forward(self, x, output_shape):
   
-        if self.use_conv_transpose:
+        if self.upsample_strategy=='conv_transpose':
             x = self.conv(x)
             if x.shape[-2:]!=output_shape:
                 x = F.interpolate(x, output_shape, mode='nearest')
         else:
             if self.channel_adj is not None:
                 x = self.channel_adj(x)
-            x = self.interpolate(x, output_shape)
+            if self.upsample_strategy=='interpolation':
+                x = self.interpolate(x, output_shape)
+            elif self.upsample_strategy=='kernel':    
+                x = self.interpolate(x)
+            
  
         return x
     
@@ -176,6 +188,29 @@ class Interpolate(nn.Module):
 
     def forward(self, x, output_shape):
         return F.interpolate(x, output_shape, mode=self.mode)    
+    
+class InterpolateConv(nn.Module):
+    """Linearly interpolate tensor to x2 the size using a fixed filter."""
+
+    def __init__(self):
+        super().__init__()
+
+        self.filter = torch.tensor([
+            [0.25, 0.5, 0.25],
+            [0.5 , 1. ,  0.5],
+            [0.25, 0.5, 0.25]
+        ])
+
+    def forward(self, x):
+        return self.interpolate_conv(x)
+
+    def interpolate_conv(self, x):
+
+        channels = x.shape[1]
+        weight = torch.tile(self.filter, (channels,1,1,1))
+        res = F.conv_transpose2d(x, weight, stride=2, padding=1, output_padding=1, groups=channels)
+        
+        return res
     
 class SE_Block(nn.Module):
     "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
@@ -302,6 +337,7 @@ class Conv2dCH(nn.Module):
                     module.bias.data.zero_()'''
 
 class Conv3dCH(nn.Module):
+
     """Create 3D cross-hair convolution filter. Parameters are the same as torch.nn.Conv3d, with the exception
     that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the filter would need negative padding
     to properly work) and dilation is not supported. Also, if padding is not provided it will be equal to (kernel_size-1)//2.
@@ -383,3 +419,4 @@ class Conv3dCH(nn.Module):
                 nn.init.kaiming_normal_(module.weight)
                 if module.bias is not None:
                     module.bias.data.zero_()'''
+        
