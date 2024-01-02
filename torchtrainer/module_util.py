@@ -77,6 +77,8 @@ class ReceptiveField:
     receptive_field = ReceptiveField(model)
     rf = receptive_field.receptive_field(module_name)
     
+    *The class creates a copy of the model, which uses additional memory.
+
     Parameters
     ----------
     model: torch.nn.Module
@@ -96,7 +98,6 @@ class ReceptiveField:
 
     def __init__(self, model, device='cuda'):
 
-        self.model_or = model
         self.device = device
         model = copy.deepcopy(model)
         self.model = model
@@ -116,6 +117,25 @@ class ReceptiveField:
         for name, _ in model.named_buffers():
             mod_name = '.'.join(name.split('.')[:-1])
             modules_with_params.add(mod_name)'''
+        
+        '''with torch.no_grad():
+            for name, module in model.named_modules():
+                if isinstance(module, self.conv_layers):
+                    # Set filters to 1/num_vals_filter. 
+                    n = module.weight[0].numel()
+                    module.weight[:] = 1./n
+                    if module.bias is not None:
+                        module.bias[:] = 0.
+                #if isinstance(module, nn.ReLU):
+                #    module.inplace = False
+                elif isinstance(module, self.conv_transp_layers):
+                    shape = module.weight
+                    stride = module.stride
+                    # Effective number of input features is ks//stride for each spatial dimension, times the number of input channels
+                    n = shape[0]*int(torch.prod(torch.tensor(shape[2:])//torch.tensor(stride)))
+                    module.weight[:] = 1./n
+                    if module.bias is not None:
+                        module.bias[:] = 0.'''
 
         with torch.no_grad():
             for name, module in model.named_modules():
@@ -125,12 +145,13 @@ class ReceptiveField:
                     ks = module.kernel_size[0]
                     dim = len(module.kernel_size)
                     n = ks**dim
+                    n = module.weight[0].numel()
                     module.weight[:] = 1./n
                     if module.bias is not None:
                         module.bias[:] = 0.
                 #if isinstance(module, nn.ReLU):
                 #    module.inplace = False
-                elif isinstance(self.conv_transp_layers):
+                elif isinstance(module, self.conv_transp_layers):
                     ks = module.kernel_size[0]
                     stride = module.stride[0]
                     dim = len(module.kernel_size)
@@ -146,7 +167,7 @@ class ReceptiveField:
                     module.bias[:] = 0.
                     module.running_mean[:] = 0.
                     module.running_var[:] = 1.
-                elif len(module.parameters(recurse=False))>0:
+                elif len(list(module.parameters(recurse=False)))>0:
                     # Layer has parameter but is not one of the modules above
                     print(f'Warning, module {name} was not recognized.')
 
@@ -198,11 +219,11 @@ class ReceptiveField:
 
         return rf
 
-    def receptive_field_bbox(self, module_name, num_channels=1, img_size=(512, 512), pixel=None):
+    def receptive_field_bbox(self, module_name, num_channels=1, img_size=(512, 512), pixel=None, eps=1e-8):
         """Returns the bounding box and center of the receptive field."""
 
         rf = self.receptive_field(module_name, num_channels, img_size, pixel)
-        inds = torch.nonzero(rf)
+        inds = torch.nonzero(rf>=eps)
         r0, c0 = inds.amin(dim=0)
         r1, c1 = inds.amax(dim=0)
         r0, c0, r1, c1 = r0.item(), c0.item(), r1.item(), c1.item()

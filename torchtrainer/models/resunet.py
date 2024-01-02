@@ -98,7 +98,7 @@ class ResUNetV2(nn.Module):
             norm_layer(out_channels, momentum=0.1),
         )
 
-        upsample = Upsample(in_channels, out_channels, upsample_strategy=self.upsample_strategy)
+        upsample = Upsample(in_channels, out_channels, upsample_strategy=self.upsample_strategy, mode='nearest')
         layers = []
         # 2*out_channels is used here because the first upsample block concatenates the output of a downsample block
         layers.append(block(2*out_channels, out_channels, 1, residual_adj)) 

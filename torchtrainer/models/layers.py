@@ -87,14 +87,11 @@ class BasicBlockOld(nn.Module):
     
 class Upsample(nn.Module):
     '''Upsamples an input and optionally adjusts the number of channels.
-    upsample_strategy can be 'interpolation', 'conv_transpose' or 'kernel'.
+    upsample_strategy can be 'interpolation', 'conv_transpose' or 'grid'.
     '''
 
     def __init__(self, in_channels=None, out_channels=None, stride=2, upsample_strategy='interpolation', mode='nearest'):
         super().__init__()
-
-        if upsample_strategy=='kernel' and stride!=2:
-            raise ValueError('stride must be 2 for kernel upsample strategy.')
 
         if upsample_strategy=='conv_transpose':
             #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
@@ -114,8 +111,8 @@ class Upsample(nn.Module):
                 self.channel_adj = None 
             if upsample_strategy=='interpolation':
                 self.interpolate = Interpolate(mode)
-            elif upsample_strategy=='kernel':    
-                self.interpolate = InterpolateConv()
+            elif upsample_strategy=='grid':    
+                self.interpolate = InterpolateGrid(mode)
 
         self.upsample_strategy = upsample_strategy
         self.mode = mode
@@ -129,11 +126,7 @@ class Upsample(nn.Module):
         else:
             if self.channel_adj is not None:
                 x = self.channel_adj(x)
-            if self.upsample_strategy=='interpolation':
-                x = self.interpolate(x, output_shape)
-            elif self.upsample_strategy=='kernel':    
-                x = self.interpolate(x)
-            
+            x = self.interpolate(x, output_shape)            
  
         return x
     
@@ -207,11 +200,60 @@ class InterpolateConv(nn.Module):
     def interpolate_conv(self, x):
 
         channels = x.shape[1]
-        weight = torch.tile(self.filter, (channels,1,1,1))
+        weight = torch.tile(self.filter, (channels,1,1,1)).to(x.device)
         res = F.conv_transpose2d(x, weight, stride=2, padding=1, output_padding=1, groups=channels)
         
         return res
-    
+
+class InterpolateGrid(nn.Module):
+
+    def __init__(self, mode='nearest'):
+        super().__init__()
+        self.mode = mode
+
+    def forward(self, x, output_shape):
+        return interpolate_grid_sample(x, output_shape, mode=self.mode)
+
+def interpolate_grid_sample(input, size=None, scale_factor=None, mode='nearest', half_r=True, half_c=True):
+    '''Interpolate tensor using half pixel shifts, which preserves the position of the receptive field.'''
+
+    if size is None and scale_factor is None:
+        raise ValueError("Either size os scale_factor must be given")
+    if isinstance(size, int):
+        size = (size, size)
+    if isinstance(scale_factor, (int,float)):
+        scale_factor = (scale_factor, scale_factor)
+
+    nr_i, nc_i = input.shape[-2:]
+    if size is None:
+        nr_o = int(scale_factor[0]*nr_i)
+        nc_o = int(scale_factor[1]*nc_i)
+    else:
+        nr_o, nc_o = size
+
+    if half_r:
+        delta_r = 0.5
+    else:
+        delta_r = 0.
+    if half_c:
+        delta_c = 0.5
+    else:
+        delta_c = 0.
+
+    r = nr_i*(torch.arange(0, nr_o)+0.5)/nr_o + delta_r
+    rn = 2*(r/nr_i - 0.5)
+    c = nc_i*(torch.arange(0, nc_o)+0.5)/nc_o + delta_c
+    cn = 2*(c/nc_i - 0.5)
+
+    rr, cc = torch.meshgrid(rn, cn, indexing='ij')
+    grid = torch.stack((cc,rr), dim=2)
+    grid = grid.tile((input.shape[0],1,1,1))
+    grid = grid.to(input.device)
+
+    res = torch.nn.functional.grid_sample(input, grid, mode=mode, align_corners=False)
+
+    return res
+
 class SE_Block(nn.Module):
     "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
     def __init__(self, c, r=16):
