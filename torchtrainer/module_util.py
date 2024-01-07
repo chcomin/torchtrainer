@@ -275,6 +275,53 @@ class ReceptiveField:
         
         return rf
 
+class FeatureExtractor:
+    """Capture activations of intermediate layers of a model. 
+    """
+
+    def __init__(self, model, module_names):
+
+        modules = []
+        for name in module_names:
+            modules.append(model.get_submodule(name))
+
+        self.model = model
+        self.module_names = module_names
+        self.modules = modules
+
+    def __call__(self, x):
+
+        hooks = self.attach_hooks(self.modules)
+        out = self.model(x)
+        acts = self.get_activations(self.module_names, hooks)
+        self.remove_hooks(hooks)
+
+        acts['out'] = x
+
+        return acts
+
+    def get_activations(self, module_names, hooks):
+
+        acts = {}
+        for name, hook in zip(module_names, hooks):
+            acts[name] = hook.activation
+
+        return acts
+
+    def attach_hooks(self, modules):
+        '''Attach forward hooks to a list of modules to get activations.'''
+
+        hooks = []
+        for module in modules:
+            hooks.append(Hook(module))
+
+        return hooks
+
+    def remove_hooks(self, hooks):
+
+        for hook in hooks:
+            hook.remove()
+
 
 def split_modules(model, modules_to_split):
     '''Split `model` layers into different groups. Useful for freezing part of the model

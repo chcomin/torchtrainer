@@ -314,7 +314,7 @@ class DeepSupervision:
         for hook in self.hooks:
             hook.remove()
 
-def get_main_resunet_modules(model, depth=1):
+def get_main_resunet_modules(model, depth=1, include_decoder=True):
     """Get main layers of the ResUNet model.
 
     Args:
@@ -330,13 +330,16 @@ def get_main_resunet_modules(model, depth=1):
     if depth==1:
         for name in model.encoder.keys():
             module_names.append(f'encoder.{name}')
-        for name in model.decoder.keys():
-            module_names.append(f'decoder.{name}.2')
+        if include_decoder:
+            for name in model.decoder.keys():
+                module_names.append(f'decoder.{name}.2')
     elif depth==2:
         from torchtrainer.models.layers import BasicBlock
         for name, module in model.named_modules():
             if isinstance(module, BasicBlock):
-                module_names.append(name)  
-    module_names.append('conv_output')
+                if 'encoder' in name or include_decoder:
+                    module_names.append(name)  
+    if include_decoder:
+        module_names.append('conv_output')
 
     return module_names
