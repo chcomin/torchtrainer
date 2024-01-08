@@ -15,10 +15,14 @@ The main modules are:
 * [model_debug.py](torchtrainer/model_debug.py): Utilities for debugging models;
 * [transforms.py](torchtrainer/transforms.py): *Deprecated*. Contains image transformation functions, useful for data augmentation. Also contains transformations for easily converting data between the numpy, pillow, pytorch and imgaug libraries. For instance,  the TransfToTensor(img, label) transform converts a 2D or 3D image and respective 2D or 3D label image to a tensor regardless if *img* and *label* are a numpy array, pillow image or imgaug object;
 
-You can install the code as an editable package by running the following command inside the torchtrainer directory (the one containing the pyproject.toml file):
+You can install the code as an editable package by running the following command inside the root directory (the directory containing the pyproject.toml file):
 
 ```pip install -e .```
 
 or if using conda:
 
 ```conda develop .```
+
+If you are using conda and for some reason want to install the package as editable using pip, and want to avoid pip messing up your environment, use
+
+```pip install --no-build-isolation --no-deps -e .```
