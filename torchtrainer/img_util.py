@@ -160,7 +160,7 @@ def get_shape(img, warn=True):
 
     return img_shape
 
-def create_container(img, text, container_shape, text_height=12, upper_pad=5, lower_pad=5):
+def _create_container(img, text, container_shape, text_height=12, upper_pad=5, lower_pad=5):
     "Create new image containing the input image and the input text above it."
 
     import skimage
@@ -180,10 +180,10 @@ def create_container(img, text, container_shape, text_height=12, upper_pad=5, lo
     if text is not None:
         xtext = 0.5
         y = container_shape[0]-1-text_area_height+lower_pad
-        ytext = pix_to_ax((y, 0), container_shape)[1]
+        ytext = _pix_to_ax((y, 0), container_shape)[1]
 
     fig = plt.figure()
-    figimage = fig.figimage(container_bg, resize=True)
+    fig.figimage(container_bg, resize=True)
     if text is not None:
         fig.text(xtext, ytext, text, c='k', fontsize=text_height, ha='center', va='baseline')
     fig.canvas.draw()
@@ -192,7 +192,8 @@ def create_container(img, text, container_shape, text_height=12, upper_pad=5, lo
 
     return container
 
-def ax_to_pix(point, img_shape):
+def _ax_to_pix(point, img_shape):
+    """Translate axes coordinates in range [0,1] to pixel coordinates."""
     
     x, y = point
     r = int(y*img_shape[0])
@@ -204,7 +205,8 @@ def ax_to_pix(point, img_shape):
     
     return r, c
 
-def pix_to_ax(point, img_shape):
+def _pix_to_ax(point, img_shape):
+    """Translate pixel coordinates to axes coordinates in range [0,1]."""
     
     r, c = point
     y = (r+0.5)/img_shape[0]
@@ -213,12 +215,15 @@ def pix_to_ax(point, img_shape):
     return x, y
 
 def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_height=12):
-    """Create image grid with an optional text for above each image.
+    """Create image grid with an optional text above each image.
+
+    It is assumed that each tensor is a RGB uint8 image with values in the range [0,255]. Also, 
+    the first dimension corresponds to the image channels.
 
     Args:
-        tensors (List[torch.tensor]): List of tensors to draw
-        nrow (int): Number of rows of the grid
-        container_shape (tuple(int,int)): Size of each image in the grid
+        tensors (List[torch.tensor]): List of tensors to draw. 
+        nrow (int): Number of images displayed in each row of the grid.
+        container_shape (tuple[int,int]): Size of each tile in the grid
         texts (List[str], optional): List of texts to put above each image. Defaults to None.
         padding (int, optional):Padding between images in the grid. Defaults to 2 pixels.
         text_height (int, optional): Height of the text. Defaults to 12 pixels.
@@ -238,15 +243,15 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
 
     containers = []
     for tensor, text in zip(tensors, texts):
-        # Change channel dimension
+        # Convert to numpy and change channel dimension
         img = np.array(tensor).transpose(1, 2, 0)
-        container = create_container(img, text, container_shape, text_height, upper_pad, lower_pad)
-        # Change channel dimension back
+        container = _create_container(img, text, container_shape, text_height, upper_pad, lower_pad)
+        # Convert back
         containers.append(torch.from_numpy(container.transpose(2, 0, 1)))
 
-    grid = torchvision.utils.make_grid(containers, nrow=nrow, padding=padding, pad_value=255).permute(1, 2, 0)
+    img_grid = torchvision.utils.make_grid(containers, nrow=nrow, padding=padding, pad_value=255).permute(1, 2, 0)
 
-    return grid
+    return img_grid
 
 
 class PerfVisualizer:
