@@ -1,6 +1,5 @@
 '''Utility functions and classes for working with Pytorch modules'''
 
-from functools import partial
 from torch import nn
 from collections import OrderedDict
 import torch
@@ -95,6 +94,7 @@ class ReceptiveField:
     conv_layers = (nn.Conv1d, nn.Conv2d, nn.Conv3d)
     conv_transp_layers = (nn.ConvTranspose1d, nn.ConvTranspose2d, nn.ConvTranspose3d)
     norm_layers = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
+    linear_layers = (nn.Linear,)
 
     def __init__(self, model, device='cuda'):
 
@@ -142,9 +142,6 @@ class ReceptiveField:
                 if isinstance(module, self.conv_layers):
                     # Set filters to 1/num_vals_filter. Assumes filters have the same
                     # size in all dimensions
-                    ks = module.kernel_size[0]
-                    dim = len(module.kernel_size)
-                    n = ks**dim
                     n = module.weight[0].numel()
                     module.weight[:] = 1./n
                     if module.bias is not None:
@@ -167,6 +164,10 @@ class ReceptiveField:
                     module.bias[:] = 0.
                     module.running_mean[:] = 0.
                     module.running_var[:] = 1.
+                elif isinstance(module, self.linear_layers):
+                    # Number of input features
+                    n = module.weight.shape[1]
+                    module.weight[:] = 1./n
                 elif len(list(module.parameters(recurse=False)))>0:
                     # Layer has parameter but is not one of the modules above
                     print(f'Warning, module {name} was not recognized.')
@@ -276,7 +277,11 @@ class ReceptiveField:
         return rf
 
 class FeatureExtractor:
-    """Capture activations of intermediate layers of a model. 
+    """Capture activations of intermediate layers of a model.
+
+    Args:
+        model (torch.nn.Module): model to analyse.
+        module_names (List[str]): list of module layers.
     """
 
     def __init__(self, model, module_names):
@@ -296,7 +301,7 @@ class FeatureExtractor:
         acts = self.get_activations(self.module_names, hooks)
         self.remove_hooks(hooks)
 
-        acts['out'] = x
+        acts['out'] = out
 
         return acts
 

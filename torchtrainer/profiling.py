@@ -139,8 +139,6 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     if return_model_info and not HAS_FVCORE:
         print("The fvcore package is not installed. Unable to count flops and activations.")
 
-        
-
     model = copy.deepcopy(model)    
 
     input = torch.rand(input_shape, device=device)
@@ -151,14 +149,18 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     else:
         cm = nullcontext()
 
-    num_params = 0
-    acts = 0
-    flops = 0
+    stats = {}
+
     if return_model_info:
         num_params = sum([p.numel() for p in model.parameters()])
         if HAS_FVCORE:
             acts = fvcore.nn.ActivationCountAnalysis(model, input).total()
             flops = fvcore.nn.FlopCountAnalysis(model, input).total()
+        stats = {
+            'params':num_params/_M,
+            'activations':acts/_G,
+            'flops':flops/_G
+        }
 
     gpu_start = torch.cuda.Event(enable_timing=True)
     gpu_end = torch.cuda.Event(enable_timing=True) 
@@ -192,15 +194,17 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     time_cpu = (cpu_end - cpu_start)
     #el_time = max([time_gpu, time_cpu])
 
-    stats = {
-        'params':num_params/_M,
-        'activations':acts/_G,
-        'flops':flops/_G,
+    stats.update({
         'memory':memory_allocated/_GiB,
         'time_cpu':time_cpu,
-        'time_gpu':time_gpu,
-        'info':['params: M', 'activations: G', 'flops: G', 'memory: GiB', 'time_cpu: s', 'time_gpu: s']
-    }
+        'time_gpu':time_gpu
+    })
+
+    stats['info'] = []
+    if return_model_info:
+        stats['info'].extend(['params: M', 'activations: G', 'flops: G'])
+    stats['info'].extend(['memory: GiB', 'time_cpu: s', 'time_gpu: s'])
+        
 
     return stats
 
