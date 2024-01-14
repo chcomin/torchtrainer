@@ -1,6 +1,6 @@
 # Torchtrainer
 
-Utility modules and functions for training Convolutional Neural Networks using [PyTorch](https://pytorch.org/). 
+Utility modules and functions for training Convolutional Neural Networks using [PyTorch](https://pytorch.org/). See the [notebooks](notebooks) folder for relevant examples.
 
 The main modules are:
 
