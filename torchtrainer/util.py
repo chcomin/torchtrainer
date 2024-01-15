@@ -2,23 +2,6 @@ import inspect
 from torch.optim import lr_scheduler
 import math
 
-class Logger:
-    """Simple class for logging data."""
-
-    def __init__(self, columns):
-        self.data = {}
-        self.columns = columns
-
-    def add_data(self, epoch, new_data):
-        self.data[epoch] = new_data
-
-    def state_dict(self):
-        return {'columns':self.columns, 'data':self.data}
-    
-    def load_state_dict(self, state_dict):
-        self.columns = state_dict['columns']
-        self.data = state_dict['data']
-
 def save_params(store):
     """Annotator for saving function parameters."""
 
