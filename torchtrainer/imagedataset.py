@@ -1,5 +1,5 @@
 '''
-Dataset storage class
+Classes for storing image datasets
 '''
 
 from pathlib import Path

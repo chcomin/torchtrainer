@@ -1,6 +1,7 @@
 import inspect
-from torch.optim import lr_scheduler
 import math
+from torch.optim import lr_scheduler
+from torch.utils.data import Dataset
 
 class Logger:
     """Simple class for logging data."""

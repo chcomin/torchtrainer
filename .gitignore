@@ -4,5 +4,4 @@ __pycache__/
 *.zip
 *.egg-info/
 tests/
-learner.py
-transforms.py
+_*

@@ -1,3 +1,5 @@
+"""Functions for benchmarking models and profiling memory usage."""
+
 import torch
 from torch.profiler import profile as pt_profile, ProfilerActivity
 from contextlib import nullcontext

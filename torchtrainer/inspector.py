@@ -1,3 +1,5 @@
+"""Inspector class for inspecting models parameters, gradients and activations"""
+
 import torch
 import torch.nn as nn
 from collections.abc import Callable
