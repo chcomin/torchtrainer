@@ -349,6 +349,25 @@ def cl_dice(input, target):
 
     return cl_dice_batch
 
+class BCELossNorm(torch.nn.Module):
+    """BCE loss with minium value of 0. 
+    
+    The usual BCE loss does not go to 0 if target is not 0 or 1. This class 
+    defines a normalized BCE loss that goes to 0."""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input, target):
+        bce_loss = F.binary_cross_entropy(input, target, reduction='none')
+        # clamp values to avoid infinite at 0 and 1
+        t_clamp = torch.log(target).clamp(-100)
+        ti_clamp = torch.log(1-target).clamp(-100)
+        # normalize
+        bce_loss_norm = bce_loss + target*t_clamp+(1-target)*ti_clamp
+        
+        return bce_loss_norm.mean()
+
 class LabelSmoothingLoss(torch.nn.Module):
     def __init__(self, num_classes, smoothing=0.0, weight=None, reduction='mean'):
         """Adapted from https://github.com/pytorch/pytorch/issues/7455#issuecomment-513062631

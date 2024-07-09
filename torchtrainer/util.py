@@ -19,6 +19,33 @@ class Logger:
         self.columns = state_dict['columns']
         self.data = state_dict['data']
 
+class Subset(Dataset):
+    """Create a new Dataset containing a subset of images from the input Dataset.
+    """
+
+    def __init__(self, ds, indices, transform=None):
+        """
+        Args:
+            ds : input Dataset
+            indices: indices to use for the new dataset
+            transform: transformations to apply to the data. Defaults to None.
+        """
+
+        self.ds = ds
+        self.indices = indices
+        self.transform = transform
+
+    def __getitem__(self, idx):
+
+        items = self.ds[self.indices[idx]]
+        if self.transform is not None:
+            items = self.transform(*items)
+
+        return items
+
+    def __len__(self):
+        return len(self.indices)
+
 def save_params(store):
     """Annotator for saving function parameters."""
 
