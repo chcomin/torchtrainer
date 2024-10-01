@@ -70,44 +70,44 @@ class RetinaDataset(Dataset):
         self.transforms = transforms
 
     def __getitem__(self, idx: int) -> Tuple:
-            
-            image = Image.open(self.images[idx])
-            label = np.array(Image.open(self.labels[idx]), dtype=int)
-            mask = np.array(Image.open(self.masks[idx]))
+        
+        image = Image.open(self.images[idx])
+        label = np.array(Image.open(self.labels[idx]), dtype=int)
+        mask = np.array(Image.open(self.masks[idx]))
 
-            # Select green channel or convert to gray
-            if self.channels=="gray":
-                image = image.convert('L')
-            image = np.array(image)
-            if self.channels=="green":
-                image = image[:,:,1]
-            if self.keepdim and image.ndim==2:
-                image = np.expand_dims(image, axis=2)
+        # Select green channel or convert to gray
+        if self.channels=="gray":
+            image = image.convert('L')
+        image = np.array(image)
+        if self.channels=="green":
+            image = image[:,:,1]
+        if self.keepdim and image.ndim==2:
+            image = np.expand_dims(image, axis=2)
 
-            # Normalize label to [0,1] if in range [0,255]
-            if self.normalize and label.max()==255:
-                label = label//255
+        # Normalize label to [0,1] if in range [0,255]
+        if self.normalize and label.max()==255:
+            label = label//255
 
-            # Keep only first label channel if it is a color image
-            if label.ndim==3:
-                diff_pix = (label[:,:,0]!=label[:,:,1]).sum()
-                diff_pix += (label[:,:,0]!=label[:,:,2]).sum()
-                if diff_pix>0:
-                    raise ValueError("Label has multiple channels and they differ.")
-                label = label[:,:,0]
+        # Keep only first label channel if it is a color image
+        if label.ndim==3:
+            diff_pix = (label[:,:,0]!=label[:,:,1]).sum()
+            diff_pix += (label[:,:,0]!=label[:,:,2]).sum()
+            if diff_pix>0:
+                raise ValueError("Label has multiple channels and they differ.")
+            label = label[:,:,0]
 
-            # Put ignore_index outside mask
-            if self.ignore_index is not None:
-                label[mask==0] = self.ignore_index
+        # Put ignore_index outside mask
+        if self.ignore_index is not None:
+            label[mask==0] = self.ignore_index
 
-            output = image, label
-            # Remember to also transform mask
-            if self.return_mask:
-                output += (mask,)
-            if self.transforms is not None:
-                output = self.transforms(*output)
+        output = image, label
+        # Remember to also transform mask
+        if self.return_mask:
+            output += (mask,)
+        if self.transforms is not None:
+            output = self.transforms(*output)
 
-            return output
+        return output
 
     def __len__(self) -> int:
         return len(self.images)
@@ -328,16 +328,16 @@ class VessMAP(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
             
-            image = np.array(Image.open(self.images[idx]))
-            label = np.array(Image.open(self.labels[idx]), dtype=int)
+        image = np.array(Image.open(self.images[idx]))
+        label = np.array(Image.open(self.labels[idx]), dtype=int)
 
-            if self.keepdim and image.ndim==2:
-                image = np.expand_dims(image, axis=2)
+        if self.keepdim and image.ndim==2:
+            image = np.expand_dims(image, axis=2)
 
-            if self.transforms is not None:
-                image, label = self.transforms(image, label)
+        if self.transforms is not None:
+            image, label = self.transforms(image, label)
 
-            return image, label
+        return image, label
 
     def __len__(self) -> int:
         return len(self.images)

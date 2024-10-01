@@ -1,1 +1,1 @@
-from . import imagedataset, img_util, module_util, perf_funcs, models, profiling, inspector
+from . import imagedataset, img_util, module_util, perf_funcs, models, profiling, inspector, datasets
