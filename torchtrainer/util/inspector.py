@@ -338,7 +338,7 @@ def flatten_data(data: dict) -> tuple[torch.Tensor, torch.Tensor]:
 if __name__=='__main__':
 
     import test_models
-    import profiling
+    import torchtrainer.util.profiling as profiling
 
 
     model = test_models.SimpleConv(num_layers=4, input_channels=1, num_channels_first=16, channel_factor=2, kernel_size=3)

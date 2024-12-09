@@ -9,6 +9,9 @@ from torch.utils.data import Dataset
 class RetinaDataset(Dataset):
     """Create a dataset object for holding a typical retina blood vessel dataset. 
 
+    Note: __getitem__ returns a numpy array and not a pillow image because pillow
+    does not support a negative ignore index (e.g. -100).
+
     Args:
         root (str | Path): Root directory.
         split (str): The split to use. Possible values are "train", "test" and
@@ -43,7 +46,7 @@ class RetinaDataset(Dataset):
         transforms: Callable | None = None,
     ) -> None:
         
-        self.root = root
+        self.root = Path(root)
         if split=="test" and not self._HAS_TEST:
             raise ValueError("This dataset does not have a test split.")
 
@@ -87,6 +90,7 @@ class RetinaDataset(Dataset):
         # Normalize label to [0,1] if in range [0,255]
         if self.normalize and label.max()==255:
             label = label//255
+            mask = mask//255
 
         # Keep only first label channel if it is a color image
         if label.ndim==3:
@@ -358,3 +362,69 @@ class VessMAP(Dataset):
 
         return images, labels
     
+class CORTEX(Dataset):
+    """Create a dataset object for holding the full CORTEX data. 
+
+    Args:
+        root (str | Path): Root directory.
+        keepdim (bool, optional): If True, keeps the channel dimension.
+        normalize (bool, optional): If True, divide the labels by 255 in case
+        label.max()==255.
+        transforms (Callable | None, optional): Transformations to apply to
+        the images and the labels. 
+    """
+
+    def __init__(
+        self,
+        root: str | Path,
+        keepdim: bool = False,
+        normalize: bool = True,
+        transforms: Callable | None = None,
+    ) -> None:
+        
+        self.root = root
+
+        images, labels = self._get_files()
+
+        self.keepdim = keepdim
+        self.normalize = normalize
+        self.images = images
+        self.labels = labels
+        self.classes = ["background", "vessel"]
+        self.transforms = transforms
+
+    def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
+            
+        image = np.array(Image.open(self.images[idx]))
+        label = np.array(Image.open(self.labels[idx]), dtype=int)
+
+        # Normalize label to [0,1] if in range [0,255]
+        if self.normalize and label.max()==255:
+            label = label//255
+
+        if self.keepdim and image.ndim==2:
+            image = np.expand_dims(image, axis=2)
+
+        if self.transforms is not None:
+            image, label = self.transforms(image, label)
+
+        return image, label
+
+    def __len__(self) -> int:
+        return len(self.images)
+    
+    def _get_files(self) -> Tuple[list, list]:
+
+        root_imgs = self.root/"images"
+        root_labels = self.root/"labels"
+
+        files = os.listdir(root_imgs)
+        images = []
+        labels = []
+        for file in files:
+
+            filename, _ = file.split('.')
+            images.append(root_imgs/file)
+            labels.append(root_labels/f"{filename}.png")
+
+        return images, labels
