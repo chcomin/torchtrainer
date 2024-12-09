@@ -5,42 +5,89 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from IPython import display
+from sympy import Sum
 import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
 
 class Logger:
-    """
-    Class for logging metrics during training and validation.
+    """ Class for logging metrics during training and validation.
     """
 
     def __init__(self): 
         self.epoch_data = {}
+        self.batch_data = {}
         self.current_epoch = 0
-        #self.names = metric_names
+        self.current_batch = 0
             
-    def log(self, epoch, name, value):
-        """Log a metric value for a given epoch.
+    def log(self, epoch, batch_idx, name, value, weight=1):
+        """ Log a metric value for a given batch.
 
         Parameters
         ----------
-        epoch : int
-            Epoch number
-        name : str
-            Name of the metric
-        value : float | int
-            Value to be logged
+        epoch: Epoch number
+        batch_idx: Index of the batch in the dataloader
+        name: Name of the metric
+        value : Value to be logged
+        weight: Weight assigned to the value when averaging over the whole epoch.
+        Usually, this is the batch size because `value` was is an average over the
+        batch
+        """
+
+        if epoch!=self.current_epoch and epoch!=self.current_epoch+1:
+            raise ValueError(f'Current epoch is {self.current_epoch} but {epoch} received')
+        if batch_idx>0 and batch_idx!=self.current_batch and batch_idx!=self.current_batch+1:
+            raise ValueError(f'Current batch is {self.current_batch} but {batch_idx} received')
+        if not isinstance(value, torch.Tensor):
+            value = torch.tensor(value)
+
+        self.current_epoch = epoch
+        self.current_batch = batch_idx
+
+        batch_data = self.batch_data
+        if name not in batch_data:
+            batch_data[name] = [(value, weight)]
+        else:
+            batch_data[name].append((value, weight))
+
+    def log_epoch(self, epoch, name, value):
+        """ Log a metric value for a given epoch.
+
+        Parameters
+        ----------
+        epoch: Epoch number
+        name: Name of the metric
+        value: Value to be logged
         """
 
         if epoch!=self.current_epoch and epoch!=self.current_epoch+1:
             raise ValueError(f'Current epoch is {self.current_epoch} but {epoch} received')
 
+        self.current_epoch = epoch
+
         epoch_data = self.epoch_data
         if epoch not in epoch_data:
             epoch_data[epoch] = {}
-            self.current_epoch = epoch
 
         epoch_data[epoch][name] = value
+
+    def end_epoch(self):
+        """ Calculate the average of the logged values over the batches for the 
+        current epoch and store them.
+        """
+
+        current_epoch = self.current_epoch
+        epoch_data = self.epoch_data
+        if current_epoch not in epoch_data:
+            epoch_data[current_epoch] = {}
+
+        for name, data in self.batch_data.items():
+            values, weights = zip(*data)
+            values = torch.stack(values).cpu()
+            weights = torch.tensor(weights)
+            avg = (weights*values).sum()/weights.sum()
+            self.epoch_data[current_epoch][name] = avg.item()
+        self.batch_data = {}
 
     def get_data(self):
         """Returns a pandas dataframe with the logged data.
@@ -82,6 +129,25 @@ class Subset(Dataset):
 
     def __len__(self):
         return len(self.indices)
+
+class WrapDict:
+    """
+    Wrapper class to name the return values of a function. Given a function
+    that returns a tuple, NameReturns creates a new function that returns a
+    dictionary with the names of the tuple elements as keys.
+    Parameters
+    ----------
+    names : Names of the values returned by the function
+    func : Function to wrap
+    """
+
+    def __init__(self, func, names):
+        self.func = func
+        self.names = names
+
+    def __call__(self, *args):
+        values = self.func(*args)
+        return {name: value for name, value in zip(self.names, values)}
 
 class SingleMetric:
     """

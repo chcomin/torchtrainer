@@ -13,6 +13,8 @@ def confusion_matrix_metrics(scores, targets, ignore_index=2):
         Output from a network. Dimension 1 is treated as the class dimension.
     targets
         Labels
+    ignore_index
+        Index on target to ignore when calculating metrics.
 
     Returns
     -------

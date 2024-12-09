@@ -50,6 +50,7 @@ class OxfordIIITPetSeg(Dataset):
                 images.append(images_folder/f'{name}.jpg')
                 segs.append(segs_folder/f'{name}.png')
 
+        self.classes = ('Background', 'Foreground')
         self.images = images
         self.segs = segs
         self.transforms = transforms
@@ -181,10 +182,6 @@ def unormalize(img):
 
 def get_dataset(root, split=0.2, resize_size=384):
 
-    # Pesos das classes foram recalculados considerando o número de pixeis
-    # de fundo e de objeto
-    class_weights = (0.33, 0.67)
-
     ds = OxfordIIITPetSeg(root)
     n = len(ds)
     n_valid = int(n*split)
@@ -196,4 +193,7 @@ def get_dataset(root, split=0.2, resize_size=384):
     ds_train = Subset(ds, indices[n_valid:], TransformsTrain(resize_size))
     ds_valid = Subset(ds, indices[:n_valid], TransformsEval(resize_size))
 
-    return ds_train, ds_valid, class_weights
+    class_weights = (0.33, 0.67)
+    ignore_index = 2
+
+    return ds_train, ds_valid, class_weights, ignore_index, collate_fn

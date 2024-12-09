@@ -3,10 +3,13 @@
 Utility modules and functions for training Neural Networks using [PyTorch](https://pytorch.org/). See the [notebooks](notebooks) folder for relevant examples.
 
 
-You can install the code as an editable package by running the following command inside the root directory (the directory containing the pyproject.toml file):
+If you use conda, you can install the code as an editable package by running the following commands:
 
-```pip install -e .```
+```bash
+git clone https://github.com/chcomin/torchtrainer.git
+pip install --no-build-isolation --no-deps -e torchtrainer
+```
 
-or if using conda:
+If you do not use conda, replace the pip install command by
 
-```pip install --no-build-isolation --no-deps -e .```
+```pip install -e torchtrainer```
