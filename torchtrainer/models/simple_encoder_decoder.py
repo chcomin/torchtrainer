@@ -1,7 +1,9 @@
 # A simple encoder decoder architecture that accepts any Pytorch resnet model
+from pathlib import Path
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torchvision.models import resnet18, ResNet18_Weights
 
 def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
 
@@ -128,3 +130,21 @@ class SimpleEncoderDecoder(nn.Module):
 
         return x
 
+def get_model(model_params, weights_strategy=None):
+
+    if weights_strategy=="encoder":
+        # Load only encoder weights
+        weights = ResNet18_Weights.DEFAULT
+    else:
+        weights = None
+
+    encoder = resnet18(weights=weights)
+    model = SimpleEncoderDecoder(encoder, decoder_channels=64, num_classes=2)  
+
+    # Check if weights_strategy is a path to a checkpoint file
+    if weights_strategy is not None:
+        weights_path = Path(weights_strategy)
+        if weights_path.is_file():
+            model.load_state_dict(torch.load(weights_path))
+
+    return model

@@ -41,7 +41,7 @@ def confusion_matrix_metrics(scores, targets, ignore_index=2):
     iou = tp/(tp+fp+fn+eps)
     prec = tp/(tp+fp+eps)
     rec = tp/(tp+fn+eps)
-    dice = 2*tp/(2*tp+fn+eps)
+    dice = 2*tp/(2*tp+fp+fn+eps)
 
     return acc, iou, prec, rec, dice
 
