@@ -4,12 +4,14 @@ import inspect
 import argparse
 from datetime import datetime
 import json
+import yaml
 import torch
 from torch import nn
 import torch.utils
 from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, WrapDict, seed_all, seed_worker, show_log
 from torchtrainer.metrics import confusion_matrix_metrics
+from torchtrainer.util.train_util import ParseKwargs
 
 class ModuleRunner:
     """ Class to train, validate and test PyTorch models.
@@ -97,10 +99,9 @@ class ModuleRunner:
                 else:
                     perf_log[name] += weighted_value
 
-def train(arg_dict=None):
-    #save-every, use-amp
+def train(commandline_string=None):
 
-    args = get_args(arg_dict)
+    args = get_args(commandline_string)
 
     seed_all(args.seed)     
     torch.set_float32_matmul_precision('high')
@@ -112,15 +113,18 @@ def train(arg_dict=None):
     experiment_path = Path(experiment_path)
     run_path = experiment_path/run_name
     if Path.exists(run_path):
-        name = input('Run path already exists. Press enter to overwrite or write the name of the run: ')
-        if name.strip():
-            run_path = experiment_path/name
+        run_name_new = input('Run path already exists. Press enter to overwrite or write the name of the run: ')
+        if run_name_new.strip():
+            run_path = experiment_path/run_name_new
+            args.run_name = run_name_new
     Path.mkdir(run_path, parents=True, exist_ok=True)
 
     config_dict = vars(args)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     config_dict['timestamp_start'] = timestamp
-    json.dump(config_dict, open(run_path/'config.json', 'w'), indent=2)
+
+    args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
+    open(run_path/'config.yaml', 'w').write(args_yaml)
     #endregion
 
     #region Dataset and DataLoaders creation. 
@@ -133,6 +137,7 @@ def train(arg_dict=None):
     """
     # Command line arguments that can be used here:
     dataset_name = args.dataset_name
+    dataset_path = args.dataset_path
     split_strategy = args.split_strategy
     augmentation_strategy = args.augmentation_strategy
     resize_size = args.resize_size
@@ -141,7 +146,7 @@ def train(arg_dict=None):
         from torchtrainer.datasets.oxford_pets import get_dataset
 
         split = float(split_strategy.split('_')[1])
-        ds_train, ds_valid, *dataset_props = get_dataset(split, resize_size)
+        ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
         class_weights, ignore_index, collate_fn = dataset_props
     else:
         raise ValueError(f'Dataset {dataset_name} not recognized')
@@ -273,17 +278,19 @@ def train(arg_dict=None):
     # Include training end time in the config file
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     config_dict['timestamp_end'] = timestamp
-    json.dump(config_dict, open(run_path/'config.json', 'w'), indent=2)
+    args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
+    open(run_path/'config.yaml', 'w').write(args_yaml)
 
     return runner
 
-def get_args(arg_dict=None):
-    """Parse command line arguments or arguments from a dictionary.
+def get_args(commandline_string=None):
+    """Parse command line arguments or arguments from a string. Adapted from
+    the timm training script
 
     Parameters
     ----------
-    arg_dict, optional
-        A dictionary containing the arguments to be parsed. 
+    commandline_string, optional
+        A string containing the command line arguments to parse.
 
     Returns
     -------
@@ -291,58 +298,86 @@ def get_args(arg_dict=None):
         An argparse namespace object containing the parsed arguments
     """
 
-    parser = get_parser()
-    if arg_dict is None:
-        args = parser.parse_args()
-    else:
-        vals = []
-        for k, v in arg_dict.items():
-            if k.startswith('--'):
-                vals.extend([k, str(v)])
-            else:
-                vals.extend([str(v)])
-        args = parser.parse_args(vals)
+    if commandline_string is not None:
+        commandline_string = commandline_string.split()
+
+    parser, config_parser = get_parser()
+
+    # If option --config was used, load the respective yaml file and set
+    # the values for the main parser
+    args_config, remaining = config_parser.parse_known_args(commandline_string)
+    if args_config.config:
+        with open(args_config.config, 'r') as f:
+            cfg = yaml.safe_load(f)
+            parser.set_defaults(**cfg)
+
+    # The main arg parser parses the rest of the args, the usual
+    # defaults will have been overridden if config file specified.
+    args = parser.parse_args(remaining)
 
     return args
 
 def get_parser():
 
+    # TODO: Allow using a YAML file to define the arguments
+    # TODO: dataset splits, number of classes, input channels
+    # TODO: model weights path
+    # TDOO: save images?
+    # TODO: eval metric
+
+    # The config_parser parses only the --config argument, this argument is used to
+    # load a yaml file containing key-values that override the defaults for the main parser below
+    config_parser = argparse.ArgumentParser(description='Training Config', add_help=False)
+    config_parser.add_argument('--config', default='', metavar='FILE',
+                        help='Path to YAML config file specifying default arguments')
+
     parser = argparse.ArgumentParser()
 
-    # Logging arguments
-    parser.add_argument('--experiment-path', default='experiments/no_name_experiment', help='Path to save experiment data')
-    parser.add_argument('--run-name', default='no_name_run', help='Name of the run for a given experiment')
-    parser.add_argument('--save-every', type=int, default=1, help='Save a model checkpoint every n epochs')
-    parser.add_argument('--meta', default='', help='Additional metadata to save in the config.json file describing the experiment')
-    # Dataset arguments
-    parser.add_argument('--dataset-name', help='Name of the dataset')
-    parser.add_argument('--split-strategy', default='randsplit_0.2', help='How to split the data into train/val/test')
-    parser.add_argument('--augmentation-strategy', help='Data augmentation procedure')
-    parser.add_argument('--resize-size', type=int, default=384, help='Size to resize the images')
-    parser.add_argument('--ignore-class-weights', action='store_true', help='If provided, use class weights for the loss function')
-    # Model arguments
-    parser.add_argument('--model-name', help='Name of the model to train')
-    parser.add_argument('--weights-strategy', 
+    # Logging parameters
+    group = parser.add_argument_group('Logging parameters')
+    group.add_argument('--experiment-path', default='experiments/no_name_experiment', help='Path to save experiment data')
+    group.add_argument('--run-name', default='no_name_run', help='Name of the run for a given experiment')
+    group.add_argument('--save-every', type=int, default=1, help='Save a model checkpoint every n epochs')
+    group.add_argument('--meta', default='', help='Additional metadata to save in the config.json file describing the experiment')
+    
+    # Dataset parameters
+    group = parser.add_argument_group('Dataset parameters')
+    group.add_argument('--dataset-name', help='Name of the dataset')
+    group.add_argument('--dataset-path', help='Path to the dataset files. By default, ./dataset-name is used.')
+    group.add_argument('--split-strategy', default='randsplit_0.2', help='How to split the data into train/val/test')
+    group.add_argument('--augmentation-strategy', help='Data augmentation procedure')
+    group.add_argument('--resize-size', default=(384,384), nargs=2, type=int, help='Size to resize the images')
+    #group.add_argument('--resize-size', type=int, default=384, help='Size to resize the images')
+    group.add_argument('--ignore-class-weights', action='store_true', help='If provided, use class weights for the loss function')
+    
+    # Model parameters
+    group = parser.add_argument_group('Model parameters')
+    group.add_argument('--model-name', help='Name of the model to train, can be given as encodername.decodername')
+    group.add_argument('--weights-strategy', 
         help='This argument is sent to the model creation function and can be used to define how to load the weights')
-    parser.add_argument('--model-params', type=json.loads, 
-        help='Model parameters with format json.dumps(dict), where `dict` is a python dictionary')
-    # Training arguments
-    parser.add_argument('--num-epochs', type=int, default=10, help='Number of training epochs')
-    parser.add_argument('--patience', type=int, default=10, help='Finish training if validation loss does not improve for `patience` epochs')
-    parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')
-    parser.add_argument('--bs-train', type=int, default=32, help='Batch size used durig training')
-    parser.add_argument('--bs-valid', type=int, default=8, help='Batch size used durig validation')
-    parser.add_argument('--weight-decay', type=float, default=0., help='Weight decay for the optimizer')
-    parser.add_argument('--loss-function', default='cross_entropy', help='Loss function to use during training')
-    parser.add_argument('--optimizer', default='sgd', help='Optimizer to use')
-    parser.add_argument('--momentum', type=float, default=0.9, help='Momentum of the optimizer')
-    parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    # Efficiency arguments
-    parser.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
-    parser.add_argument('--num-workers', type=int, default=0, help='Number of workers for the DataLoader')
-    parser.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
+    group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs,
+                       help='Additional parameters to pass to the model creation function. E.g. --model-params a=1 b=2 c=3')
+    
+    # Training parameters
+    group = parser.add_argument_group('Training parameters')
+    group.add_argument('--num-epochs', type=int, default=10, help='Number of training epochs')
+    group.add_argument('--patience', type=int, default=10, help='Finish training if validation loss does not improve for `patience` epochs')
+    group.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')
+    group.add_argument('--bs-train', type=int, default=32, help='Batch size used durig training')
+    group.add_argument('--bs-valid', type=int, default=8, help='Batch size used durig validation')
+    group.add_argument('--weight-decay', type=float, default=1e-4, help='Weight decay for the optimizer')
+    group.add_argument('--loss-function', default='cross_entropy', help='Loss function to use during training')
+    group.add_argument('--optimizer', default='sgd', help='Optimizer to use')
+    group.add_argument('--momentum', type=float, default=0.9, help='Momentum of the optimizer')
+    group.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
+    
+    # Device and efficiency parameters
+    group = parser.add_argument_group('Device and efficiency parameters')
+    group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
+    group.add_argument('--num-workers', type=int, default=0, help='Number of workers for the DataLoader')
+    group.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
 
-    return parser
+    return parser, config_parser
 
 if __name__ == '__main__':
     train()

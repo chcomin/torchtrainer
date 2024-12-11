@@ -180,11 +180,9 @@ def unormalize(img):
 
     return img
 
-def get_dataset(split=0.2, resize_size=384):
+def get_dataset(dataset_path, split=0.2, resize_size=384):
 
-    root = "/home/chcomin/Dropbox/ufscar/Visao Computacional/01-2024/Aulas/data/oxford_pets"
-
-    ds = OxfordIIITPetSeg(root)
+    ds = OxfordIIITPetSeg(dataset_path)
     n = len(ds)
     n_valid = int(n*split)
 

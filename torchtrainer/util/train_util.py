@@ -1,6 +1,8 @@
 import inspect
 import math
 import random
+import argparse
+import ast
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -189,6 +191,18 @@ class MultipleMetrics:
     def __call__(self, *args):
         results = self.func(*args)
         return ((name,result) for name, result in zip(self.metric_names, results))
+
+class ParseKwargs(argparse.Action):
+    """Class to use when parsing a dictionary from the command line."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        kw = {}
+        for value in values:
+            key, value = value.split('=')
+            try:
+                kw[key] = ast.literal_eval(value)
+            except ValueError:
+                kw[key] = str(value)  # fallback to string (avoid need to escape on command line)
+        setattr(namespace, self.dest, kw)
 
 def seed_all(seed, deterministic=True):
     """
