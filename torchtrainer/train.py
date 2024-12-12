@@ -3,14 +3,14 @@ from pathlib import Path
 import inspect
 import argparse
 from datetime import datetime
-import json
+import operator
 import yaml
 import torch
 from torch import nn
 import torch.utils
 from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, WrapDict, seed_all, seed_worker, show_log
-from torchtrainer.metrics import confusion_matrix_metrics
+from torchtrainer.metrics import ConfusionMatrixMetrics
 from torchtrainer.util.train_util import ParseKwargs
 
 class ModuleRunner:
@@ -39,7 +39,6 @@ class ModuleRunner:
     def train_one_epoch(self, epoch):
 
         self.model.train()
-        #loss_log = 0.
         for batch_idx, (imgs, targets) in enumerate(self.dl_train):
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
@@ -50,6 +49,9 @@ class ModuleRunner:
             self.optim.step()
 
             self.logger.log(epoch, batch_idx, 'train/loss', loss.detach(), imgs.shape[0])
+
+            #if (batch_idx+1)%self.print_every == 0:
+            #    pass
 
         self.scheduler.step()
     
@@ -72,6 +74,9 @@ class ModuleRunner:
                 # Iterate over the results and log them
                 for name, value in results.items():
                     self.logger.log(epoch, batch_idx, f'valid/{name}', value, imgs.shape[0])
+
+            #if (batch_idx+1)%self.print_every == 0:
+            #    pass
     
     def predict(self, batch):
         """Method to apply after training the model to predict a single batch of data.
@@ -110,6 +115,7 @@ def train(commandline_string=None):
     experiment_path = args.experiment_path
     run_name = args.run_name
 
+    # Create experiment and run directories
     experiment_path = Path(experiment_path)
     run_path = experiment_path/run_name
     if Path.exists(run_path):
@@ -119,16 +125,22 @@ def train(commandline_string=None):
             args.run_name = run_name_new
     Path.mkdir(run_path, parents=True, exist_ok=True)
 
+    # Register training start time
     config_dict = vars(args)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     config_dict['timestamp_start'] = timestamp
 
+    # Save the config file
     args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
     open(run_path/'config.yaml', 'w').write(args_yaml)
     #endregion
 
     #region Dataset and DataLoaders creation. 
-    """ All datasets must return:
+    """ 
+    Each dataset must have a respective get_dataset function. This section of the
+    training script can be adapted to send the relevant parameters to get_dataset
+
+    All datasets must return:
     - Train and validation datasets
     - The class weights
     - If a value should be ignored in the target (ignore_index)
@@ -141,11 +153,13 @@ def train(commandline_string=None):
     split_strategy = args.split_strategy
     augmentation_strategy = args.augmentation_strategy
     resize_size = args.resize_size
+    # A dictionary with additional parameters that can be passed to get_dataset
+    dataset_params = args.dataset_params
 
     if dataset_name=='oxford_pets':
         from torchtrainer.datasets.oxford_pets import get_dataset
 
-        split = float(split_strategy.split('_')[1])
+        split = float(split_strategy)
         ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
         class_weights, ignore_index, collate_fn = dataset_props
     else:
@@ -158,6 +172,10 @@ def train(commandline_string=None):
         class_weights = (1.,)*len(class_weights)
 
     if ignore_index is None: ignore_index = -100    
+
+    # Infer number of classes and channels from the dataset. Maybe unsafe?
+    num_classes = len(class_weights)
+    num_channels = ds_train[0][0].shape[0]
                                  
     num_workers = args.num_workers
     device = args.device
@@ -180,19 +198,38 @@ def train(commandline_string=None):
         persistent_workers=num_workers>0,
         pin_memory='cuda' in device,
     )
+
+    # Do a sanity check on the validation dataloader
+    try:
+        valid_batch = next(iter(dl_valid))[0]
+    except Exception as e:
+        print('The following problem was detected on the validation dataloader:')
+        raise e
     #endregion
 
     #region Model creation
     model_name = args.model_name
+    # String representing how to load the model weights
     weights_strategy = args.weights_strategy
+    # Dictionary with additional parameters to pass to the model creation function
     model_params = args.model_params
+    # num_channel and num_classes can also be used here
 
     if model_name=='encoder_decoder':
         from torchtrainer.models.simple_encoder_decoder import get_model
-        
-        model = get_model(model_params, weights_strategy)
+
+        model = get_model(model_params['decoder_channels'], num_classes, weights_strategy)
     else:
         raise ValueError(f'Model {model} not recognized')
+    
+    model.to(device)
+
+    try:
+        model(valid_batch.to(device))
+    except Exception as e:
+        print("The following error happened when applying the model to the validation batch:")
+        raise e
+
     #endregion
 
     #region Training elements
@@ -203,7 +240,7 @@ def train(commandline_string=None):
 
     if loss_function=='cross_entropy':
         loss_func = nn.CrossEntropyLoss(torch.tensor(class_weights, device=device), 
-                                        ignore_index=ignore_index)
+                                        ignore_index=ignore_index or -100)
     else:
         raise ValueError(f'Loss function {loss_function} not recognized')
     
@@ -220,7 +257,7 @@ def train(commandline_string=None):
     scheduler = torch.optim.lr_scheduler.PolynomialLR(optim, num_epochs)
 
     perf_funcs = [
-        WrapDict(confusion_matrix_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
+        WrapDict(ConfusionMatrixMetrics(ignore_index), ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
     ]
         
     logger = Logger()
@@ -235,11 +272,17 @@ def train(commandline_string=None):
         logger,
         device
     )
+
+    # Validation metric for early stopping
+    val_metric_name = f'valid/{args.validation_metric}'
+    maximize = args.maximize_validation_metric
+    # Set gt or lt operator depending on maximization or minimization problem
+    compare = operator.gt if maximize else operator.lt
     #endregion
 
     #region Training
     model.to(device)
-    best_loss = torch.inf
+    best_val_metric = -torch.inf if maximize else torch.inf
     epochs_without_improvement = 0
     for epoch in range(0, num_epochs):
         runner.train_one_epoch(epoch)
@@ -260,10 +303,11 @@ def train(commandline_string=None):
         if (epoch+1)%args.save_every==0:
             torch.save(checkpoint, run_path/'checkpoint.pt')
 
-        loss_valid = logger.get_data()['valid/loss'].iloc[-1]
-        if loss_valid<best_loss:
+        val_metric = logger.get_data()[val_metric_name].iloc[-1]
+
+        if compare(val_metric, best_val_metric):
             torch.save(checkpoint, run_path/'best_model.pt')
-            best_loss = loss_valid
+            best_val_metric = val_metric
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
@@ -319,11 +363,7 @@ def get_args(commandline_string=None):
 
 def get_parser():
 
-    # TODO: Allow using a YAML file to define the arguments
-    # TODO: dataset splits, number of classes, input channels
-    # TODO: model weights path
-    # TDOO: save images?
-    # TODO: eval metric
+    # TODO: do not log on every batch
 
     # The config_parser parses only the --config argument, this argument is used to
     # load a yaml file containing key-values that override the defaults for the main parser below
@@ -343,16 +383,20 @@ def get_parser():
     # Dataset parameters
     group = parser.add_argument_group('Dataset parameters')
     group.add_argument('--dataset-name', help='Name of the dataset')
-    group.add_argument('--dataset-path', help='Path to the dataset files. By default, ./dataset-name is used.')
-    group.add_argument('--split-strategy', default='randsplit_0.2', help='How to split the data into train/val/test')
-    group.add_argument('--augmentation-strategy', help='Data augmentation procedure')
+    group.add_argument('--dataset-path', help='Path to the dataset files. By default, ./dataset-name is used.')        
+    group.add_argument('--split-strategy', default='0.2', 
+                       help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
+    group.add_argument('--augmentation-strategy', help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
     group.add_argument('--resize-size', default=(384,384), nargs=2, type=int, help='Size to resize the images')
-    #group.add_argument('--resize-size', type=int, default=384, help='Size to resize the images')
-    group.add_argument('--ignore-class-weights', action='store_true', help='If provided, use class weights for the loss function')
+    group.add_argument('--dataset-params', nargs='*', default={}, action=ParseKwargs,
+                       help='Additional parameters to pass to the dataset creation function. E.g. --dataset-params a=1 b=2 c=3'
+                       'The additional parameters are evaluated as Python code and cannot contain spaces.')
+
+    group.add_argument('--ignore-class-weights', action='store_true', help='If provided, ignore class weights on the loss function')
     
     # Model parameters
     group = parser.add_argument_group('Model parameters')
-    group.add_argument('--model-name', help='Name of the model to train, can be given as encodername.decodername')
+    group.add_argument('--model-name', help='Name of the model to train')
     group.add_argument('--weights-strategy', 
         help='This argument is sent to the model creation function and can be used to define how to load the weights')
     group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs,
@@ -361,7 +405,9 @@ def get_parser():
     # Training parameters
     group = parser.add_argument_group('Training parameters')
     group.add_argument('--num-epochs', type=int, default=10, help='Number of training epochs')
-    group.add_argument('--patience', type=int, default=10, help='Finish training if validation loss does not improve for `patience` epochs')
+    group.add_argument('--patience', type=int, default=10, help='Early stopping. Finish training if validation metric does not improve for `patience` epochs')
+    group.add_argument('--validation-metric', default='loss', help='Which metric to use for early stopping')
+    group.add_argument('--maximize-validation-metric', action='store_true', help='If the validation metric should be maximized or minimized')
     group.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')
     group.add_argument('--bs-train', type=int, default=32, help='Batch size used durig training')
     group.add_argument('--bs-valid', type=int, default=8, help='Batch size used durig validation')

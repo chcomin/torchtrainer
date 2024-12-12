@@ -130,7 +130,7 @@ class SimpleEncoderDecoder(nn.Module):
 
         return x
 
-def get_model(model_params, weights_strategy=None):
+def get_model(decoder_channels=64, num_classes=2, weights_strategy=None):
 
     if weights_strategy=="encoder":
         # Load only encoder weights
@@ -139,7 +139,8 @@ def get_model(model_params, weights_strategy=None):
         weights = None
 
     encoder = resnet18(weights=weights)
-    model = SimpleEncoderDecoder(encoder, decoder_channels=64, num_classes=2)  
+    model = SimpleEncoderDecoder(encoder, decoder_channels=decoder_channels, 
+                                 num_classes=num_classes)  
 
     # Check if weights_strategy is a path to a checkpoint file
     if weights_strategy is not None:

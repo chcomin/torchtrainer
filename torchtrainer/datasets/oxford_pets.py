@@ -87,11 +87,11 @@ class OxfordIIITPetSeg(Dataset):
 
 class TransformsTrain:
 
-    def __init__(self, resize_size=384):
+    def __init__(self, resize_size=(384, 384)):
     
         transforms = transf.Compose([
             transf.PILToTensor(),   
-            transf.RandomResizedCrop(size=(resize_size,resize_size), scale=(0.5,1.), 
+            transf.RandomResizedCrop(size=resize_size, scale=(0.5,1.), 
                                      ratio=(0.9,1.1), antialias=True),
             #transf.ColorJitter(brightness=0.2, contrast=0.1, saturation=0.1, hue=0.01),
             transf.RandomHorizontalFlip(),
@@ -117,7 +117,7 @@ class TransformsTrain:
 
 class TransformsEval:
 
-    def __init__(self, resize_size=384):
+    def __init__(self, resize_size=(384, 384)):
 
         transforms = transf.Compose([
             transf.PILToTensor(),   
@@ -180,7 +180,7 @@ def unormalize(img):
 
     return img
 
-def get_dataset(dataset_path, split=0.2, resize_size=384):
+def get_dataset(dataset_path, split=0.2, resize_size=(384, 384)):
 
     ds = OxfordIIITPetSeg(dataset_path)
     n = len(ds)

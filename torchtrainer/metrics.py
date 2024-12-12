@@ -2,8 +2,32 @@
 import torch
 import torch.nn.functional as F
 
+class ConfusionMatrixMetrics:
+    """Calculate accuracy, precision, recall, IoU and Dice scores for a batch
+    of data."""
+    def __init__(self, ignore_index=None):
+        """
+        Parameters
+        ----------
+        ignore_index
+            Target index to ignore in the calculation
+        """
+        self.ignore_index = ignore_index
+
+    def __call__(self, scores, targets):
+        """
+        Parameters
+        ----------
+        scores
+            Output from a network. Dimension 1 is treated as the class dimension.
+        targets
+            Labels
+        """
+        return confusion_matrix_metrics(scores, targets, self.ignore_index)
+        
+
 @torch.no_grad()
-def confusion_matrix_metrics(scores, targets, ignore_index=2):
+def confusion_matrix_metrics(scores, targets, ignore_index=None):
     """Calculate accuracy, precision, recall, IoU and Dice scores for a batch
     of data.
 

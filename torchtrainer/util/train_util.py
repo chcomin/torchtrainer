@@ -16,11 +16,13 @@ class Logger:
     """ Class for logging metrics during training and validation.
     """
 
-    def __init__(self): 
+    def __init__(self, log_every=1): 
+        self.log_every = log_every
         self.epoch_data = {}
         self.batch_data = {}
         self.current_epoch = 0
         self.current_batch = 0
+        
             
     def log(self, epoch, batch_idx, name, value, weight=1):
         """ Log a metric value for a given batch.
@@ -104,6 +106,8 @@ class Logger:
         df.insert(0, 'epoch', df.index)
 
         return df
+    
+    
 
 class Subset(Dataset):
     """Create a new Dataset containing a subset of images from the input Dataset.
