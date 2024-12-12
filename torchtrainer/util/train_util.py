@@ -106,8 +106,7 @@ class Logger:
         df.insert(0, 'epoch', df.index)
 
         return df
-    
-    
+  
 
 class Subset(Dataset):
     """Create a new Dataset containing a subset of images from the input Dataset.
