@@ -13,9 +13,8 @@ from torchtrainer.util.train_util import ParseKwargs
 
 # TODO: do not log on every batch
 # TODO: profiling
-# TODO: add try except for training loop
 
-class ModuleRunner:
+class DefaultModuleRunner:
     """ Class to train, validate and test PyTorch models."""
 
     def add_dataset_elements(
@@ -141,10 +140,9 @@ class DefaultTrainer:
         args = self.get_args(commandline_string)
 
         seed_all(args.seed)     
-        torch.set_float32_matmul_precision('high')
 
         self.args = args
-        self.module_runner = ModuleRunner()
+        self.module_runner = DefaultModuleRunner()
         self.setup_experiment()
         self.setup_dataset()
         self.setup_model()
@@ -201,6 +199,8 @@ class DefaultTrainer:
         # A dictionary with additional parameters that can be passed to get_dataset
         dataset_params = args.dataset_params
 
+        seed_all(args.seed)
+
         if dataset_name=='oxford_pets':
             from torchtrainer.datasets.oxford_pets import get_dataset
 
@@ -249,6 +249,8 @@ class DefaultTrainer:
         num_classes = self.module_runner.num_classes
         num_channels = self.module_runner.num_channels
 
+        seed_all(args.seed)
+
         if model_name=='encoder_decoder':
             from torchtrainer.models.simple_encoder_decoder import get_model
 
@@ -267,6 +269,10 @@ class DefaultTrainer:
         optimizer = args.optimizer
         momentum = args.momentum
         module_runner = self.module_runner
+
+        torch.backends.cudnn.deterministic = args.deterministic
+        torch.backends.cudnn.benchmark = args.benchmark      
+        torch.set_float32_matmul_precision('high') 
 
         # Create dataloaders        
         num_workers = args.num_workers
@@ -335,6 +341,8 @@ class DefaultTrainer:
         runner = self.module_runner
         logger = runner.logger
         run_path = self.run_path
+
+        seed_all(args.seed)
 
         # Validation metric for early stopping
         val_metric_name = f'valid/{args.validation_metric}'
@@ -481,6 +489,8 @@ class DefaultTrainer:
         group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
         group.add_argument('--num-workers', type=int, default=5, help='Number of workers for the DataLoader')
         group.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
+        group.add_argument('--deterministic', action='store_true', help='If deterministic algorithms should be used')
+        group.add_argument('--benchmark', action='store_true', help='If cuda benchmark should be used')
 
         return parser, config_parser
 

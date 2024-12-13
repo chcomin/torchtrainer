@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from IPython import display
-from sympy import Sum
 import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
@@ -138,7 +137,7 @@ class Subset(Dataset):
 class WrapDict:
     """
     Wrapper class to name the return values of a function. Given a function
-    that returns a tuple, NameReturns creates a new function that returns a
+    that returns a tuple, WrapDict creates a new function that returns a
     dictionary with the names of the tuple elements as keys.
     Parameters
     ----------
@@ -207,7 +206,7 @@ class ParseKwargs(argparse.Action):
                 kw[key] = str(value)  # fallback to string (avoid need to escape on command line)
         setattr(namespace, self.dest, kw)
 
-def seed_all(seed, deterministic=True):
+def seed_all(seed):
     """
     Seed all random number generators for reproducibility. If deterministic is
     True, set cuDNN to deterministic mode.
@@ -215,10 +214,7 @@ def seed_all(seed, deterministic=True):
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
-    if deterministic:
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-
+    
 def seed_worker(worker_id):
     """
     Set Python and numpy seeds for dataloader workers. Each worker receives a 

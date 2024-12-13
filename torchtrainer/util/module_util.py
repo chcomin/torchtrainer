@@ -199,7 +199,7 @@ class ReceptiveField:
         hook = Hook(module, False)
 
         x = torch.ones(1, num_channels, img_size[0], img_size[1], requires_grad=True, device=self.device)
-        res = model(x)
+        _ = model(x)
 
         act = hook.activation
         if pixel is None:
@@ -256,7 +256,7 @@ class ReceptiveField:
 
         with torch.no_grad():
             x = torch.zeros(1, num_channels, img_size[0], img_size[0])
-            res = model(x)
+            _ = model(x)
             act = hook.activation
             size = act.shape[-2:]
             pixel = (size[0]//2, size[1]//2)
@@ -344,17 +344,22 @@ def define_opt_params(module_groups, lr=None, wd=None, debug=False):
     to groupd modules in `module_groups`. '''
 
     num_groups = len(module_groups)
-    if isinstance(lr, int): lr = [lr]*num_groups
-    if isinstance(wd, int): wd = [wd]*num_groups
+    if isinstance(lr, int): 
+        lr = [lr]*num_groups
+    if isinstance(wd, int): 
+        wd = [wd]*num_groups
 
     opt_params = []
     for idx, group in enumerate(module_groups):
         group_params = {'params':[]}
-        if lr is not None: group_params['lr'] = lr[idx]
-        if wd is not None: group_params['wd'] = wd[idx]
+        if lr is not None: 
+            group_params['lr'] = lr[idx]
+        if wd is not None: 
+            group_params['wd'] = wd[idx]
         for module in group:
             pars = module.parameters(recurse=False)
-            if debug: print(module.__class__)
+            if debug: 
+                print(module.__class__)
             pars = list(filter(lambda p: p.requires_grad, pars))
             if len(pars)>0:
                 group_params['params'] += pars
@@ -371,13 +376,13 @@ def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
     for idx, group in enumerate(module_groups):
         for module in group:
             for p in module.parameters(recurse=False):
-                if not keep_bn or not isinstance(module, bn_types): p.requires_grad=req_grad
+                if not keep_bn or not isinstance(module, bn_types): 
+                    p.requires_grad=req_grad
 
 def freeze_to(module_groups, group_idx=-1, keep_bn=False):
     '''Freeze model groups up to the group with index `group_idx`. If `group_idx` is None,
     freezes the entire model. If `keep_bn` is True, batchnorm layers are not changed.'''
 
-    num_groups = len(module_groups)
     slice_freeze = slice(0, group_idx)
     if group_idx is not None:
         slice_unfreeze = slice(group_idx, None)

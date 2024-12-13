@@ -102,10 +102,13 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
     """
 
     img = Image.open(img_file_path)
-    if print_info: print(pil_img_info(img))
+    if print_info: 
+        print(pil_img_info(img))
 
-    if channel is not None: img = img.getchannel(channel)
-    if convert_gray: img = img.convert('L')
+    if channel is not None: 
+        img = img.getchannel(channel)
+    if convert_gray: 
+        img = img.convert('L')
     if is_label:
         # Map intensity values to indices 0, 1, 2,...
         colors = [t[1] for t in img.getcolors()]
@@ -293,9 +296,9 @@ class PerfVisualizer:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
                 perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc.item()}
 
-            perc = round(100*idx/num_samples)
+            perc = 100*(idx+1)/num_samples
             if idx%print_interv==0 or idx==num_samples-1:
-                print(f'Evaluating images...{100*(idx+1)/num_samples:1.0f}%', end='\r')
+                print(f'Evaluating images...{perc:1.0f}%', end='\r')
 
         print(''*30, end='\r')
 

@@ -11,13 +11,17 @@ class ConvBlock(torch.nn.Module):
         pool_mode can be False (no pooling) or True ('maxpool')
         '''
         super(ConvBlock, self).__init__()
-        if shortcut==True: self.shortcut = nn.Sequential(conv1x1(in_c, out_c), nn.BatchNorm2d(out_c))
-        else: self.shortcut=False
+        if shortcut: 
+            self.shortcut = nn.Sequential(conv1x1(in_c, out_c), nn.BatchNorm2d(out_c))
+        else: 
+            self.shortcut=False
         pad = (k_sz - 1) // 2
 
         block = []
-        if pool: self.pool = nn.MaxPool2d(kernel_size=2)
-        else: self.pool = False
+        if pool: 
+            self.pool = nn.MaxPool2d(kernel_size=2)
+        else: 
+            self.pool = False
 
         block.append(nn.Conv2d(in_c, out_c, kernel_size=k_sz, padding=pad))
         block.append(nn.ReLU())
@@ -29,10 +33,13 @@ class ConvBlock(torch.nn.Module):
 
         self.block = nn.Sequential(*block)
     def forward(self, x):
-        if self.pool: x = self.pool(x)
+        if self.pool: 
+            x = self.pool(x)
         out = self.block(x)
-        if self.shortcut: return out + self.shortcut(x)
-        else: return out
+        if self.shortcut: 
+            return out + self.shortcut(x)
+        else: 
+            return out
 
 class UpsampleBlock(torch.nn.Module):
     def __init__(self, in_c, out_c, up_mode='transp_conv'):
@@ -89,7 +96,7 @@ class UpConvBlock(torch.nn.Module):
 
 class UNetLW(nn.Module):
     def __init__(self, in_c, n_classes, layers, k_sz=3, up_mode='transp_conv', conv_bridge=True, shortcut=True):
-        super(UNet, self).__init__()
+        super().__init__()
         self.n_classes = n_classes
         self.first = ConvBlock(in_c=in_c, out_c=layers[0], k_sz=k_sz,
                                shortcut=shortcut, pool=False)

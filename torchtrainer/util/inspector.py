@@ -59,7 +59,8 @@ class Inspector:
             modules_to_track = modules
 
         if agg_func is None:
-            agg_func = lambda data, module_name, data_type, param_name=None: data
+            def agg_func(data, module_name, data_type, param_name=None):
+                return data
                        
         self.modules_to_track = modules_to_track
         self.agg_func = agg_func
@@ -334,40 +335,3 @@ def flatten_data(data: dict) -> tuple[torch.Tensor, torch.Tensor]:
                 flattened_data[idx:idx+num_el] = param_data.view(-1)  
 
     return flattened_data
-
-if __name__=='__main__':
-
-    import test_models
-    import torchtrainer.util.profiling as profiling
-
-
-    model = test_models.SimpleConv(num_layers=4, input_channels=1, num_channels_first=16, channel_factor=2, kernel_size=3)
-    model.to('cuda')
-
-    x = torch.full((1, 1, 256, 256), 5., device='cuda')
-
-    def call_model(model, x):
-        model(x).sum().backward()
-
-    inspector = Inspector(model)
-    #inspector.start_tracking_activations()
-    #inspector.start_tracking_act_grads()
-    stats = profiling.benchmark_function(call_model, (model, x), profile=False)
-    params = inspector.get_params()
-    #grads = inspector.get_grads()
-    #activations = inspector.get_activations()
-    #act_grads = inspector.get_act_grads()
-    print(params)
-    #print(grads)
-    #print(activations)
-    #print(act_grads)
-    #print(stats)
-
-    """def mean(data, module_name, data_type, param_name):
-        return data.mean()
-
-    inspector = Inspector(model, agg_func=mean)
-    model(x).sum().backward()
-    grad_avgs = inspector.get_grads()
-    print(grad_avgs)"""
-  

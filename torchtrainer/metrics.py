@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 
 # Aliases just to remind that tensors can be on CPU or GPU
 type CpuTensor = torch.Tensor

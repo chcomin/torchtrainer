@@ -1,6 +1,5 @@
 """U-Net architecture made by Prof. Cesar Comin"""
 
-import torch
 from torch import nn
 from .layers import BasicBlock, Upsample, Concat, conv3x3, conv1x1
 from..util.module_util import Hook

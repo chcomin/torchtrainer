@@ -286,8 +286,8 @@ if __name__=='__main__':
             self.layers = nn.ModuleList([nn.Conv2d(1, num_channels, 3)] + [nn.Conv2d(num_channels, num_channels, 3) for _ in range(num_layers)] + [nn.Conv2d(num_channels, 2, 3)])
 
         def forward(self, x):
-            for l in self.layers:
-                x = l(x)
+            for layer in self.layers:
+                x = layer(x)
             return x
 
     model = Model(200, 4).to('cuda')
