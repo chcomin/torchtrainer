@@ -15,21 +15,21 @@ class RetinaDataset(Dataset):
     Args:
         root (str | Path): Root directory.
         split (str): The split to use. Possible values are "train", "test" and
-        "all"
+            "all"
         channels (str, optional): Image channels to use. Options are:
             "all": Use all channels
             "green": Use only the green channel
             "gray": Convert the image to grayscale
         keepdim (bool, optional): If True, keeps the channel dimension in case
-        `channels` is "green" or "gray"
+            `channels` is "green" or "gray"
         return_mask (bool, optional): If True, also returns the retina mask
         ignore_index (int | None, optional): Index to put at the labels for pixels
-        outside the mask (the retina). If None, do nothing.
+            outside the mask (the retina). If None, do nothing.
         normalize (bool, optional): If True, divide the labels by 255 in case
-        label.max()==255.
+            label.max()==255.
         transforms (Callable | None, optional): Transformations to apply to
-        the images and the labels. If `return_mask` is True, the transform
-        needs to also accept the mask image as input.
+            the images and the labels. If `return_mask` is True, the transform
+            needs to also accept the mask image as input.
     """
 
     _HAS_TEST = None

@@ -11,35 +11,58 @@ from torchtrainer.util.train_util import Logger, WrapDict, seed_all, seed_worker
 from torchtrainer.metrics import ConfusionMatrixMetrics
 from torchtrainer.util.train_util import ParseKwargs
 
+# TODO: do not log on every batch
+# TODO: profiling
+# TODO: add try except for training loop
+
 class ModuleRunner:
     """ Class to train, validate and test PyTorch models."""
 
-    def add_dataset_elements(self, dl_train, dl_valid, loss_func, perf_funcs):
-        self.dl_train = dl_train
-        self.dl_valid = dl_valid
+    def add_dataset_elements(
+            self, 
+            ds_train, 
+            ds_valid, 
+            num_classes,
+            num_channels,
+            collate_fn,
+            loss_func, 
+            perf_funcs):
+        self.ds_train = ds_train
+        self.ds_valid = ds_valid
+        self.num_classes = num_classes
+        self.num_channels = num_channels
+        self.collate_fn = collate_fn
         self.loss_func = loss_func
         self.perf_funcs = perf_funcs
 
     def add_model_elements(self, model):
          self.model = model
 
-    def add_training_elements(self, optim, scheduler, logger, device):
+    def add_training_elements(self, dl_train, dl_valid, optim, scheduler, logger, 
+                              scaler, device):
+        self.dl_train = dl_train
+        self.dl_valid = dl_valid
         self.optim = optim
         self.scheduler = scheduler
         self.logger = logger
+        self.scaler = scaler
         self.device = device
      
     def train_one_epoch(self, epoch: int):
 
         self.model.train()
+        scaler = self.scaler
         for batch_idx, (imgs, targets) in enumerate(self.dl_train):
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
-            scores = self.model(imgs)
-            loss = self.loss_func(scores, targets)
             self.optim.zero_grad()
-            loss.backward()
-            self.optim.step()
+            with torch.autocast(device_type=self.device, enabled=scaler.is_enabled()):    # Forward pass in mixed precision
+                scores = self.model(imgs)
+                loss = self.loss_func(scores, targets)
+            
+            scaler.scale(loss).backward()
+            scaler.step(self.optim)
+            scaler.update()
 
             self.logger.log(epoch, batch_idx, 'train/loss', loss.detach(), imgs.shape[0])
 
@@ -96,7 +119,7 @@ class ModuleRunner:
 
         return output
 
-class Trainer:
+class DefaultTrainer:
     """Class for setting up all components of a training experiment."""
 
     def __init__(self, commandline_string: str | None = None):
@@ -122,6 +145,10 @@ class Trainer:
 
         self.args = args
         self.module_runner = ModuleRunner()
+        self.setup_experiment()
+        self.setup_dataset()
+        self.setup_model()
+        self.setup_training()
 
     def setup_experiment(self):
         """Setup elements related to persistent data storation on the disk."""
@@ -188,18 +215,14 @@ class Trainer:
 
         if args.ignore_class_weights:
             class_weights = (1.,)*len(class_weights)
-
-        if ignore_index is None: ignore_index = -100    
-
-        # Infer number of classes and channels from the dataset. Maybe unsafe?
-        num_classes = len(class_weights)
-        num_channels = ds_train[0][0].shape[0]
+        if ignore_index is None: 
+            ignore_index = -100    
 
         # How the dataset should be evaluated
         loss_function = args.loss_function
         if loss_function=='cross_entropy':
             loss_func = nn.CrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
-                                            ignore_index=ignore_index or -100)
+                                            ignore_index=ignore_index)
         else:
             raise ValueError(f'Loss function {loss_function} not recognized')
 
@@ -207,40 +230,12 @@ class Trainer:
             WrapDict(ConfusionMatrixMetrics(ignore_index), ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
         ]
 
-        # Create dataloaders        
-        num_workers = args.num_workers
-        device = args.device
-
-        dl_train = DataLoader(
-            ds_train, 
-            batch_size=args.bs_train, 
-            shuffle=True, 
-            num_workers=num_workers,
-            persistent_workers=num_workers>0,
-            worker_init_fn=seed_worker,
-            pin_memory='cuda' in device,
-        )
-        dl_valid = DataLoader(
-            ds_valid,
-            batch_size=args.bs_valid, 
-            shuffle=False, 
-            collate_fn=collate_fn,
-            num_workers=num_workers, 
-            persistent_workers=num_workers>0,
-            pin_memory='cuda' in device,
-        )
-
-        # Do a sanity check on the validation dataloader
-        try:
-            next(iter(dl_valid))
-        except Exception as e:
-            print('The following problem was detected on the validation dataloader:')
-            raise e
-        
-        # We need to create these attributes to use them in the model setup
-        dl_valid.num_classes = num_classes
-        dl_valid.num_channels = num_channels
-        self.module_runner.add_dataset_elements(dl_train, dl_valid, loss_func, perf_funcs)
+        num_classes = len(class_weights)
+        # Infer number o channels from the dataset. Maybe unsafe?
+        num_channels = ds_train[0][0].shape[0]
+        self.module_runner.add_dataset_elements(
+            ds_train, ds_valid, num_classes, num_channels, 
+            collate_fn, loss_func, perf_funcs)
 
     def setup_model(self):
         """Model creation. Each model must have a respective get_model function."""
@@ -251,9 +246,8 @@ class Trainer:
         weights_strategy = args.weights_strategy
         # Dictionary with additional parameters to pass to the model creation function
         model_params = args.model_params
-        dl_valid = self.module_runner.dl_valid
-        num_classes = dl_valid.num_classes
-        num_channels = dl_valid.num_channels
+        num_classes = self.module_runner.num_classes
+        num_channels = self.module_runner.num_channels
 
         if model_name=='encoder_decoder':
             from torchtrainer.models.simple_encoder_decoder import get_model
@@ -262,30 +256,59 @@ class Trainer:
                               num_classes, weights_strategy)
         else:
             raise ValueError(f'Model {model} not recognized')
-        
-        device = args.device
-        model.to(device)
-
-        # Do a sanity check on the validation dataloader
-        valid_batch = next(iter(dl_valid))[0]
-        try:
-            model(valid_batch.to(device))
-        except Exception as e:
-            print("The following error happened when applying the model to the validation batch:")
-            raise e
-        
+                
         self.module_runner.add_model_elements(model)
         
     def setup_training(self):
-        """Setup the training elements: optimizer, scheduler, logger, device"""
+        """Setup the training elements: dataloaders, optimizer, scheduler and logger"""
 
         args = self.args
-
         num_epochs = args.num_epochs
         optimizer = args.optimizer
         momentum = args.momentum
+        module_runner = self.module_runner
 
-        model = self.module_runner.model
+        # Create dataloaders        
+        num_workers = args.num_workers
+        device = args.device
+
+        dl_train = DataLoader(
+            module_runner.ds_train, 
+            batch_size=args.bs_train, 
+            shuffle=True, 
+            collate_fn=module_runner.collate_fn,
+            num_workers=num_workers,
+            persistent_workers=num_workers>0,
+            worker_init_fn=seed_worker,
+            pin_memory='cuda' in device,
+        )
+        dl_valid = DataLoader(
+            module_runner.ds_valid,
+            batch_size=args.bs_valid, 
+            shuffle=False, 
+            collate_fn=module_runner.collate_fn,
+            num_workers=num_workers, 
+            persistent_workers=num_workers>0,
+            pin_memory='cuda' in device,
+        )
+
+        device = args.device
+        model = module_runner.model
+        model.to(device)
+
+        # Do a sanity check on the validation dataloader
+        try:
+           batch = next(iter(dl_valid))
+        except Exception as e:
+            print('The following problem was detected on the validation dataloader:')
+            raise e
+
+        # Do a sanity check on the model
+        try:
+            model(batch[0].to(device))
+        except Exception as e:
+            print("The following error happened when applying the model to the validation batch:")
+            raise e
         
         if optimizer=='sgd':
             optim = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
@@ -297,18 +320,16 @@ class Trainer:
             optim = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
                                     betas=(momentum, 0.999))
         
-        scheduler = torch.optim.lr_scheduler.PolynomialLR(optim, num_epochs)
+        scheduler = torch.optim.lr_scheduler.PolynomialLR(optim, num_epochs, args.lr_decay)
+
+        scaler = torch.GradScaler(device=device, enabled=args.use_amp)
             
         logger = Logger()
-        self.module_runner.add_training_elements(optim, scheduler, logger, args.device)
+        self.module_runner.add_training_elements(dl_train, dl_valid, optim, scheduler, 
+                                                 logger, scaler, args.device)
 
-    def train(self):
-        """Setup averything and run the training loop."""
-
-        self.setup_experiment()
-        self.setup_dataset()
-        self.setup_model()
-        self.setup_training()
+    def fit(self):
+        """Start the training loop."""
 
         args = self.args
         runner = self.module_runner
@@ -322,33 +343,40 @@ class Trainer:
         compare = operator.gt if maximize else operator.lt
         best_val_metric = -torch.inf if maximize else torch.inf
 
+        checkpoint = runner.state_dict()
         epochs_without_improvement = 0
-        for epoch in range(0, args.num_epochs):
-            runner.train_one_epoch(epoch)
-            runner.validate_one_epoch(epoch)
-            # Aggregate batch metrics into epoch metrics
-            logger.end_epoch()
+        was_interrupted = False
+        try:
+            for epoch in range(0, args.num_epochs):
+                runner.train_one_epoch(epoch)
+                runner.validate_one_epoch(epoch)
+                # Aggregate batch metrics into epoch metrics
+                logger.end_epoch()
 
-            show_log(logger)
+                show_log(logger)
 
-            logger.get_data().to_csv(run_path/'log.csv', index=False)
-            
-            checkpoint = runner.state_dict()
+                logger.get_data().to_csv(run_path/'log.csv', index=False)
+                
+                checkpoint = runner.state_dict()
 
-            if (epoch+1)%args.save_every==0:
-                torch.save(checkpoint, run_path/'checkpoint.pt')
+                if (epoch+1)%args.save_every==0:
+                    torch.save(checkpoint, run_path/'checkpoint.pt')
 
-            # Check for model improvement
-            val_metric = logger.get_data()[val_metric_name].iloc[-1]
-            if compare(val_metric, best_val_metric):
-                torch.save(checkpoint, run_path/'best_model.pt')
-                best_val_metric = val_metric
-                epochs_without_improvement = 0
-            else:
-                epochs_without_improvement += 1
-                # No improvement for `patience`` epochs
-                if epochs_without_improvement>args.patience:
-                    break
+                # Check for model improvement
+                val_metric = logger.get_data()[val_metric_name].iloc[-1]
+                if compare(val_metric, best_val_metric):
+                    torch.save(checkpoint, run_path/'best_model.pt')
+                    best_val_metric = val_metric
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
+                    # No improvement for `patience`` epochs
+                    if epochs_without_improvement>args.patience:
+                        break
+        except KeyboardInterrupt:
+            # This exception allows interrupting the training loop with Ctrl+C,
+            # but sometimes it does not work due to the multiprocessing DataLoader
+            was_interrupted = True
             
         # Save the last checkpoint in case save_every is not multiple of num_epochs
         torch.save(checkpoint, run_path/'checkpoint.pt')
@@ -396,8 +424,6 @@ class Trainer:
 
     def get_parser(self) -> argparse.ArgumentParser:
 
-        # TODO: do not log on every batch
-
         # The config_parser parses only the --config argument, this argument is used to
         # load a yaml file containing key-values that override the defaults for the main parser below
         config_parser = argparse.ArgumentParser(description='Training Config', add_help=False)
@@ -416,7 +442,7 @@ class Trainer:
         # Dataset parameters
         group = parser.add_argument_group('Dataset parameters')
         group.add_argument('--dataset-name', help='Name of the dataset')
-        group.add_argument('--dataset-path', help='Path to the dataset files. By default, ./dataset-name is used.')        
+        group.add_argument('--dataset-path', help='Path to the dataset root directory')        
         group.add_argument('--split-strategy', default='0.2', 
                         help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
         group.add_argument('--augmentation-strategy', help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
@@ -424,8 +450,8 @@ class Trainer:
         group.add_argument('--dataset-params', nargs='*', default={}, action=ParseKwargs,
                         help='Additional parameters to pass to the dataset creation function. E.g. --dataset-params a=1 b=2 c=3'
                         'The additional parameters are evaluated as Python code and cannot contain spaces.')
-
-        group.add_argument('--ignore-class-weights', action='store_true', help='If provided, ignore class weights on the loss function')
+        group.add_argument('--loss-function', default='cross_entropy', help='Loss function to use during training')
+        group.add_argument('--ignore-class-weights', action='store_true', help='If provided, ignore class weights for the loss function')
         
         # Model parameters
         group = parser.add_argument_group('Model parameters')
@@ -438,14 +464,14 @@ class Trainer:
         # Training parameters
         group = parser.add_argument_group('Training parameters')
         group.add_argument('--num-epochs', type=int, default=10, help='Number of training epochs')
-        group.add_argument('--patience', type=int, default=10, help='Early stopping. Finish training if validation metric does not improve for `patience` epochs')
         group.add_argument('--validation-metric', default='loss', help='Which metric to use for early stopping')
-        group.add_argument('--maximize-validation-metric', action='store_true', help='If the validation metric should be maximized or minimized')
+        group.add_argument('--patience', type=int, default=50, help='Finish training if validation metric does not improve for `patience` epochs')
+        group.add_argument('--maximize-validation-metric', action='store_true', help='If set, early stopping will maximize the validation metric instead of minimizing')
         group.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')
+        group.add_argument('--lr-decay', type=float, default=1., help='Learning rate decay')
         group.add_argument('--bs-train', type=int, default=32, help='Batch size used durig training')
         group.add_argument('--bs-valid', type=int, default=8, help='Batch size used durig validation')
         group.add_argument('--weight-decay', type=float, default=1e-4, help='Weight decay for the optimizer')
-        group.add_argument('--loss-function', default='cross_entropy', help='Loss function to use during training')
         group.add_argument('--optimizer', default='sgd', help='Optimizer to use')
         group.add_argument('--momentum', type=float, default=0.9, help='Momentum of the optimizer')
         group.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
@@ -453,11 +479,11 @@ class Trainer:
         # Device and efficiency parameters
         group = parser.add_argument_group('Device and efficiency parameters')
         group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
-        group.add_argument('--num-workers', type=int, default=0, help='Number of workers for the DataLoader')
+        group.add_argument('--num-workers', type=int, default=5, help='Number of workers for the DataLoader')
         group.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
 
         return parser, config_parser
 
 
 if __name__ == '__main__':
-    Trainer().train()
+    DefaultTrainer().fit()

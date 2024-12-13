@@ -26,15 +26,19 @@ class Subset(Dataset):
         return len(self.indices)
 
 class OxfordIIITPetSeg(Dataset):
-    """Dataset de segmentação Oxford Pets."""
+    """Oxford Pets segmentation dataset."""
 
     def __init__(self, root, transforms=None, ignore_val=2):
         """
-        Args:
-            root: Diretório raiz.
-            transforms: Transformações a serem aplicadas nas imagens originais e 
-            de rótulos.
-            ignore_val: Valor associado a píxeis que serão ignorados (borda).
+
+        Parameters
+        ----------
+        root
+            Dataset root folder
+        transforms
+            Transformations to be applied to the images and targets
+        ignore_val
+            Value to be used for ignored pixels
         """
 
         root = Path(root)
@@ -45,7 +49,7 @@ class OxfordIIITPetSeg(Dataset):
         images = []
         segs = []
         for line in open(anns_file).read().splitlines():
-            if line[0]!="#":   # Remove comentários do arquivo
+            if line[0]!="#":   # Discards file comments
                 name, class_id, species_id, breed_id = line.strip().split()
                 images.append(images_folder/f'{name}.jpg')
                 segs.append(segs_folder/f'{name}.png')
@@ -58,23 +62,17 @@ class OxfordIIITPetSeg(Dataset):
 
     def __getitem__(self, idx, apply_transform=True):
 
-        # .convert("RGB") para garantir que as imagens são coloridas
         image = Image.open(self.images[idx]).convert("RGB")
         target_or = Image.open(self.segs[idx])
 
-        # Muitos algoritmos esperam que o fundo trenha índice 0 e o objeto de interesse
-        # possua valor 1. As imagens deste dataset possuem valores 1 para o objeto,
-        # 2 para o fundo e 3 para píxeis indefinidos. Portanto, modificaremos os valores
-        # 2->0 e 3->ignore_val
+        # Oxford Pets uses 1 for foreground, 2 for background and 3 for undefined pixels
+        # Change 2->0 and 3->ignore_val
         target_np = np.array(target_or)
         target_np[target_np==2] = 0
 
-        # Valor a ser usado para pixeis ignorados:
         if self.ignore_val!=3:
             target_np[target_np==3] = self.ignore_val
 
-        # Padronizamos que um dataset retorna uma imagem pillow, então precisamos
-        # converter novamente a imagem para esse formato
         target = Image.fromarray(target_np, mode="L")
 
         if self.transforms and apply_transform:
@@ -102,16 +100,11 @@ class TransformsTrain:
         self.transforms = transforms
 
     def __call__(self, img, target):
-        # Convertemos os tensores para os tipos Image e Mask para que as transformações 
-        # tratem adequadamente as duas imagens. Por exemplo, não faz sentido modificar
-        # o brilho da imagem de rótulo
         img = tv_tensors.Image(img)
         target = tv_tensors.Mask(target)
         img, target = self.transforms(img, target)
         img = img.data
         target = target.data
-        # Remoção da dimensão de canal do target, pois as funções de loss esperam
-        # um target de tamanho batch_size x altura x largura
         target = target.squeeze()
         return img, target
 
@@ -138,24 +131,31 @@ class TransformsEval:
         return img, target
     
 def cat_list(images, fill_value=0):
+    """Concatenate a list of images into a single tensor.
 
-    # Rótulos não possuem a dimensão de canal
+    Parameters
+    ----------
+    images
+        List of images
+    fill_value, optional
+       How to pad the images
+    Returns
+    -------
+        Batched images as a tensor
+    """
+
     is_target = images[0].ndim==2
 
     num_rows, num_cols = zip(*[img.shape[-2:] for img in images])
-    # Maior número de linhas e colunas no batch
     r_max, c_max = max(num_rows), max(num_cols)
-    # Tamanho total do batch
     if is_target:
         batch_shape = (len(images), r_max, c_max)
     else:
         batch_shape = (len(images), 3, r_max, c_max)
 
-    # Inserção de cada imagem dentro do batch
     batched_imgs = torch.full(batch_shape, fill_value, dtype=images[0].dtype)
     for idx in range(len(images)):
         img = images[idx]
-        # Insere img na região de mesmo tamanho dentro do batch
         if is_target:
             batched_imgs[idx, :img.shape[0], :img.shape[1]] = img
         else:

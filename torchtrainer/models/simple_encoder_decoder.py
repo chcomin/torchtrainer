@@ -18,13 +18,16 @@ def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
     return nn.Sequential(*layer)
 
 class DecoderBlock(nn.Module):
-    '''Recebe a ativação do nível anterior do decoder `x_dec` e a ativação do 
-    encoder `x_enc`. É assumido que `x_dec` possui uma resolução espacial
-    menor que que `x_enc` e que `x_enc` possui número de canais diferente
-    de `x_dec`.
-    
-    O módulo ajusta a resolução de `x_dec` para ser igual a `x_enc` e o número
-    de canais de `x_enc` para ser igual a `x_dec`.'''
+    """
+    Receives the activation from the previous level of the decoder `x_dec` and the activation from the encoder `x_enc`. 
+    It is assumed that `x_dec` has a smaller spatial resolution than `x_enc` and that `x_enc` has a different number of channels than `x_dec`.
+    The module adjusts the resolution of `x_dec` to be equal to `x_enc` and the number of channels of `x_enc` to be equal to `x_dec`.
+
+    Args:
+        enc_channels: Number of channels of the encoder features.
+        dec_channels: Number of channels to use for the decoder.
+
+    """
 
     def __init__(self, enc_channels, dec_channels):
         super().__init__()
@@ -43,7 +46,6 @@ class Decoder(nn.Module):
     def __init__(self, encoder_channels_list, decoder_channels):
         super().__init__()
 
-        # Inverte lista para facilitar interpretação
         encoder_channels_list = encoder_channels_list[::-1]
 
         self.middle = conv_norm(encoder_channels_list[0], decoder_channels)
@@ -54,19 +56,16 @@ class Decoder(nn.Module):
 
     def forward(self, features):
 
-        # Inverte lista para facilitar interpretação
         features = features[::-1]
 
         x = self.middle(features[0])
         for idx in range(1, len(features)):
-            # Temos um bloco a menos do que nro de features, por isso
-            # o idx-1
             x = self.blocks[idx-1](features[idx], x)
 
         return x
 
 class SimpleEncoderDecoder(nn.Module):
-    """Amostra ativações de um modelo ResNet do Pytorch e cria um decodificador."""
+    """Sample the activations of a Pytorch ResNet model and create a decoder."""
 
     def __init__(self, resnet_encoder, decoder_channels, num_classes):
         super().__init__()
@@ -100,7 +99,6 @@ class SimpleEncoderDecoder(nn.Module):
     def get_channels(self):
 
         re = self.resnet_encoder
-        # Armazena se o modelo estava em modo treinamento
         training = re.training
         re.eval()
 
@@ -109,7 +107,6 @@ class SimpleEncoderDecoder(nn.Module):
             features = self.get_features(x)
         encoder_channels_list = [f.shape[1] for f in features]
 
-        # Volta para treinamento
         if training:
             re.train()
 
@@ -123,9 +120,6 @@ class SimpleEncoderDecoder(nn.Module):
         if x.shape[-2:]!=in_shape:
             x = F.interpolate(x, size=in_shape, mode="nearest")
 
-        # A camada de classificação poderia estar antes da interpolação, o que
-        # reduziria o custo computacional mas possivelmente levaria a segmentações
-        # menos detalhadas
         x = self.classification(x)
 
         return x
