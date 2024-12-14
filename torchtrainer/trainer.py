@@ -1,17 +1,21 @@
 from pathlib import Path
+import shutil
 import argparse
 from datetime import datetime
 import operator
 import yaml
+from tqdm.auto import tqdm
+import pandas as pd
 import torch
 from torch import nn
 import torch.utils
 from torch.utils.data import DataLoader
-from torchtrainer.util.train_util import Logger, WrapDict, seed_all, seed_worker, show_log
+from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict
+from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_img
 from torchtrainer.metrics import ConfusionMatrixMetrics
 from torchtrainer.util.train_util import ParseKwargs
 
-# TODO: do not log on every batch
+# TODO: wandb 
 # TODO: profiling
 
 class DefaultModuleRunner:
@@ -25,7 +29,9 @@ class DefaultModuleRunner:
             num_channels,
             collate_fn,
             loss_func, 
-            perf_funcs):
+            perf_funcs,
+            logger,
+            logger_plotter):
         self.ds_train = ds_train
         self.ds_valid = ds_valid
         self.num_classes = num_classes
@@ -33,17 +39,18 @@ class DefaultModuleRunner:
         self.collate_fn = collate_fn
         self.loss_func = loss_func
         self.perf_funcs = perf_funcs
+        self.logger = logger
+        self.logger_plotter = logger_plotter
 
     def add_model_elements(self, model):
          self.model = model
 
-    def add_training_elements(self, dl_train, dl_valid, optim, scheduler, logger, 
+    def add_training_elements(self, dl_train, dl_valid, optim, scheduler,
                               scaler, device):
         self.dl_train = dl_train
         self.dl_valid = dl_valid
         self.optim = optim
         self.scheduler = scheduler
-        self.logger = logger
         self.scaler = scaler
         self.device = device
      
@@ -51,7 +58,16 @@ class DefaultModuleRunner:
 
         self.model.train()
         scaler = self.scaler
-        for batch_idx, (imgs, targets) in enumerate(self.dl_train):
+
+        pbar = tqdm(
+            self.dl_train,
+            desc='Training',
+            leave=False,
+            unit='batchs',
+            dynamic_ncols=True,
+            colour='blue',
+        )
+        for batch_idx, (imgs, targets) in enumerate(pbar):
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
             self.optim.zero_grad()
@@ -63,35 +79,40 @@ class DefaultModuleRunner:
             scaler.step(self.optim)
             scaler.update()
 
-            self.logger.log(epoch, batch_idx, 'train/loss', loss.detach(), imgs.shape[0])
+            self.logger.log(epoch, batch_idx, 'Train loss', loss.detach(), imgs.shape[0])
 
             #if (batch_idx+1)%self.print_every == 0:
             #    pass
-
+        # Log learning rate
+        self.logger.log_epoch(epoch, 'lr', self.optim.param_groups[0]['lr'])
         self.scheduler.step()
     
     @torch.no_grad()
     def validate_one_epoch(self, epoch: int):
 
-        dl_valid = self.dl_valid
-     
         self.model.eval()
-        for batch_idx, (imgs, targets) in enumerate(dl_valid):
+
+        pbar = tqdm(
+            self.dl_valid,
+            desc='Validating',
+            leave=False,
+            unit='batchs',
+            dynamic_ncols=True,
+            colour='green',
+        )    
+        for batch_idx, (imgs, targets) in enumerate(pbar):
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
             scores = self.model(imgs)
             loss = self.loss_func(scores, targets)
 
-            self.logger.log(epoch, batch_idx, 'valid/loss', loss, imgs.shape[0])
+            self.logger.log(epoch, batch_idx, 'Validation loss', loss, imgs.shape[0])
             for perf_func in self.perf_funcs:
                 # Apply performance metric function
                 results = perf_func(scores, targets)
                 # Iterate over the results and log them
                 for name, value in results.items():
-                    self.logger.log(epoch, batch_idx, f'valid/{name}', value, imgs.shape[0])
-
-            #if (batch_idx+1)%self.print_every == 0:
-            #    pass
+                    self.logger.log(epoch, batch_idx, name, value, imgs.shape[0])
     
     @torch.no_grad()
     def predict(self, batch):
@@ -103,7 +124,7 @@ class DefaultModuleRunner:
         batch_device = batch.device
 
         model.eval()
-        output = model(batch.to(model.device)).to(batch_device)
+        output = model(batch.to(self.device)).to(batch_device)
 
         return output
     
@@ -143,28 +164,36 @@ class DefaultTrainer:
 
         self.args = args
         self.module_runner = DefaultModuleRunner()
+        print("Setting up the experiment...")
         self.setup_experiment()
         self.setup_dataset()
         self.setup_model()
         self.setup_training()
+        print("Done setting up.")
 
     def setup_experiment(self):
         """Setup elements related to persistent data storation on the disk."""
 
         args = self.args
-        experiment_path = args.experiment_path
+        experiments_path = args.experiments_path
+        experiment_name = args.experiment_name
         run_name = args.run_name
 
         # Create experiment and run directories
-        experiment_path = Path(experiment_path)
+        experiment_path = Path(experiments_path)/experiment_name
         run_path = experiment_path/run_name
         if Path.exists(run_path):
             run_name_new = input('Run path already exists. Press enter to overwrite or write the name of the run: ')
             if run_name_new.strip():
                 run_path = experiment_path/run_name_new
                 args.run_name = run_name_new
+            else:
+                shutil.rmtree(run_path)
         Path.mkdir(run_path, parents=True, exist_ok=True)
         self.run_path = run_path
+
+        if args.save_val_img:
+            Path.mkdir(run_path/'images', exist_ok=True)
 
         # Register training start time
         config_dict = vars(args)
@@ -230,12 +259,19 @@ class DefaultTrainer:
             WrapDict(ConfusionMatrixMetrics(ignore_index), ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
         ]
 
+        logger = Logger()
+        # How to group the data when plotting, each groups becomes an individual plot
+        logger_plotter = LoggerPlotter([
+            {'names': ['Train loss', 'Validation loss'], 'y_max': 1.},
+            {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'], 'y_max': 1.}
+        ])
+
         num_classes = len(class_weights)
         # Infer number o channels from the dataset. Maybe unsafe?
         num_channels = ds_train[0][0].shape[0]
         self.module_runner.add_dataset_elements(
             ds_train, ds_valid, num_classes, num_channels, 
-            collate_fn, loss_func, perf_funcs)
+            collate_fn, loss_func, perf_funcs, logger, logger_plotter)
 
     def setup_model(self):
         """Model creation. Each model must have a respective get_model function."""
@@ -254,8 +290,8 @@ class DefaultTrainer:
         if model_name=='encoder_decoder':
             from torchtrainer.models.simple_encoder_decoder import get_model
 
-            model = get_model(model_params['decoder_channels'], 
-                              num_classes, weights_strategy)
+            model = get_model(**model_params, num_classes=num_classes, 
+                              weights_strategy=weights_strategy)
         else:
             raise ValueError(f'Model {model} not recognized')
                 
@@ -330,9 +366,8 @@ class DefaultTrainer:
 
         scaler = torch.GradScaler(device=device, enabled=args.use_amp)
             
-        logger = Logger()
         self.module_runner.add_training_elements(dl_train, dl_valid, optim, scheduler, 
-                                                 logger, scaler, args.device)
+                                                 scaler, args.device)
 
     def fit(self):
         """Start the training loop."""
@@ -340,12 +375,14 @@ class DefaultTrainer:
         args = self.args
         runner = self.module_runner
         logger = runner.logger
+        logger_plotter = runner.logger_plotter
         run_path = self.run_path
+        evaluate_every = args.evaluate_every
 
         seed_all(args.seed)
 
         # Validation metric for early stopping
-        val_metric_name = f'valid/{args.validation_metric}'
+        val_metric_name = args.validation_metric
         maximize = args.maximize_validation_metric
         # Set gt or lt operator depending on maximization or minimization problem
         compare = operator.gt if maximize else operator.lt
@@ -354,37 +391,58 @@ class DefaultTrainer:
         checkpoint = runner.state_dict()
         epochs_without_improvement = 0
         was_interrupted = False
+        print("Training has started")
+        pbar = tqdm(
+            range(args.num_epochs),
+            desc='Epochs',
+            leave=True,
+            unit='epochs',
+            dynamic_ncols=True,
+            colour='blue',
+        )
         try:
-            for epoch in range(0, args.num_epochs):
+            for epoch in pbar:
                 runner.train_one_epoch(epoch)
-                runner.validate_one_epoch(epoch)
+                if epoch==0 or epoch%evaluate_every==0:
+                    runner.validate_one_epoch(epoch)
                 # Aggregate batch metrics into epoch metrics
                 logger.end_epoch()
 
-                show_log(logger)
+                logger_data = logger.get_data()
+                last_metrics = logger_data.iloc[-1]
+                pbar.set_postfix(last_metrics[['Train loss', 'Validation loss', val_metric_name]].to_dict()) 
 
-                logger.get_data().to_csv(run_path/'log.csv', index=False)
+                # Save logged data
+                logger_data.to_csv(run_path/'log.csv', index=False)
+                # Save plot of logged data
+                logger_plotter.get_plot(logger).savefig(run_path/'plots.png')
                 
                 checkpoint = runner.state_dict()
 
                 if (epoch+1)%args.save_every==0:
                     torch.save(checkpoint, run_path/'checkpoint.pt')
 
-                # Check for model improvement
-                val_metric = logger.get_data()[val_metric_name].iloc[-1]
-                if compare(val_metric, best_val_metric):
-                    torch.save(checkpoint, run_path/'best_model.pt')
-                    best_val_metric = val_metric
-                    epochs_without_improvement = 0
-                else:
-                    epochs_without_improvement += 1
-                    # No improvement for `patience`` epochs
-                    if epochs_without_improvement>args.patience:
-                        break
+                if epoch==0 or epoch%evaluate_every==0:
+                    if args.save_val_img:
+                        predict_and_save_val_img(runner, epoch, args.val_img_idx, run_path)                  
+
+                    # Check for model improvement
+                    val_metric = last_metrics[val_metric_name]
+                    if compare(val_metric, best_val_metric):
+                        torch.save(checkpoint, run_path/'best_model.pt')
+                        best_val_metric = val_metric
+                        epochs_without_improvement = 0
+                    else:
+                        epochs_without_improvement += 1
+                        # No improvement for `patience`` epochs
+                        if epochs_without_improvement>args.patience:
+                            break
         except KeyboardInterrupt:
             # This exception allows interrupting the training loop with Ctrl+C,
             # but sometimes it does not work due to the multiprocessing DataLoader
             was_interrupted = True
+
+        print("Training has finished")
             
         # Save the last checkpoint in case save_every is not multiple of num_epochs
         torch.save(checkpoint, run_path/'checkpoint.pt')
@@ -442,15 +500,19 @@ class DefaultTrainer:
 
         # Logging parameters
         group = parser.add_argument_group('Logging parameters')
-        group.add_argument('--experiment-path', default='experiments/no_name_experiment', help='Path to save experiment data')
-        group.add_argument('--run-name', default='no_name_run', help='Name of the run for a given experiment')
-        group.add_argument('--save-every', type=int, default=1, help='Save a model checkpoint every n epochs')
+        group.add_argument('-p', '--experiments-path', default='experiments', help='Path to save experiments data')
+        group.add_argument('-e', '--experiment-name', default='no_name_experiment', help='Name of the experiment')
+        group.add_argument('-n', '--run-name', default='no_name_run', help='Name of the run for a given experiment')
+        group.add_argument('--evaluate-every', type=int, default=1, help='Run a validation epoch every n epochs')
+        group.add_argument('--save-every', type=int, default=1, help='Save model checkpoint every n epochs')
+        group.add_argument('--save-val-img', action='store_true', help='Save a validation image every epoch')
+        group.add_argument('--val-img-idx', type=int, default=0, help='Index of the validation image to save')
         group.add_argument('--meta', default='', help='Additional metadata to save in the config.json file describing the experiment')
         
         # Dataset parameters
         group = parser.add_argument_group('Dataset parameters')
-        group.add_argument('--dataset-name', help='Name of the dataset')
-        group.add_argument('--dataset-path', help='Path to the dataset root directory')        
+        group.add_argument('-d', '--dataset-name', help='Name of the dataset')
+        group.add_argument('-r', '--dataset-path', help='Path to the dataset root directory')        
         group.add_argument('--split-strategy', default='0.2', 
                         help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
         group.add_argument('--augmentation-strategy', help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
@@ -463,7 +525,7 @@ class DefaultTrainer:
         
         # Model parameters
         group = parser.add_argument_group('Model parameters')
-        group.add_argument('--model-name', help='Name of the model to train')
+        group.add_argument('-m', '--model-name', help='Name of the model to train')
         group.add_argument('--weights-strategy', 
             help='This argument is sent to the model creation function and can be used to define how to load the weights')
         group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs,
@@ -471,8 +533,8 @@ class DefaultTrainer:
         
         # Training parameters
         group = parser.add_argument_group('Training parameters')
-        group.add_argument('--num-epochs', type=int, default=10, help='Number of training epochs')
-        group.add_argument('--validation-metric', default='loss', help='Which metric to use for early stopping')
+        group.add_argument('--num-epochs', type=int, default=2, help='Number of training epochs')
+        group.add_argument('--validation-metric', default='Validation loss', help='Which metric to use for early stopping')
         group.add_argument('--patience', type=int, default=50, help='Finish training if validation metric does not improve for `patience` epochs')
         group.add_argument('--maximize-validation-metric', action='store_true', help='If set, early stopping will maximize the validation metric instead of minimizing')
         group.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')

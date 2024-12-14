@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from IPython import display
+from PIL import Image
 import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
@@ -15,8 +16,7 @@ class Logger:
     """ Class for logging metrics during training and validation.
     """
 
-    def __init__(self, log_every=1): 
-        self.log_every = log_every
+    def __init__(self): 
         self.epoch_data = {}
         self.batch_data = {}
         self.current_epoch = 0
@@ -105,23 +105,80 @@ class Logger:
         df.insert(0, 'epoch', df.index)
 
         return df
-  
+
+class LoggerPlotter:
+    """Plot data logged into a Logger object."""
+
+    def __init__(self, groups):
+        """
+        In order to organize the plots, it is necessary to group the metrics.
+        `groups` is a list of dictionaries. Each dictionary has two keys:
+        `names` is a list of the names of the metrics to be plotted together.
+        `y_max` is the maximum value for the y-axis.
+
+        For example:
+        groups = [
+            {'names': ['train/loss', 'valid/loss'], 'y_max': 1.0},
+            {'names': ['valid/accuracy'], 'y_max': 1.0}
+        ]
+
+        This will create two plots. One for the losses and another for the accuracy.
+
+        Parameters
+        ----------
+        groups
+            List of groups of metrics to be plotted together.
+        """
+        self.groups = groups
+
+    def get_plot(self, logger):
+
+        df = logger.get_data()
+        epochs = df['epoch']
+
+        ncols = 2
+        nrows = (len(self.groups)+1)//ncols
+
+        fig, axes = plt.subplots(nrows, ncols, figsize=(8, 3*nrows), squeeze=False)
+        axes = axes.flatten()
+
+        for group, ax in zip(self.groups, axes):
+            names = group['names']
+            max_y = group['y_max']
+            for name in names:
+                values = df[name]
+                # Mask nan values
+                mask = np.isfinite(values)
+                ax.plot(epochs[mask], values[mask], '-o', ms=2, label=name)
+            ax.set_xlabel('Epoch')
+            ax.legend()
+            ax.set_ylim((0, max_y))
+
+        fig.tight_layout()
+        # Avoid showing the plot in the notebook
+        plt.close()
+
+        return fig
+        
 
 class Subset(Dataset):
     """Create a new Dataset containing a subset of images from the input Dataset.
     """
 
-    def __init__(self, ds, indices, transform=None):
+    def __init__(self, ds, indices, transform=None, **attributes):
         """
         Args:
             ds : input Dataset
             indices: indices to use for the new dataset
             transform: transformations to apply to the data. Defaults to None.
+            attributes: additional attributes to store in the new dataset.
         """
 
         self.ds = ds
         self.indices = indices
         self.transform = transform
+        for k, v in attributes.items():
+            setattr(self, k, v)
 
     def __getitem__(self, idx):
 
@@ -233,7 +290,7 @@ def show_log(logger):
     epochs = df['epoch']
     train_loss = df['train/loss']
     valid_loss = df['valid/loss']
-    acc_names = df.columns[3:]
+    acc_names = df.columns[4:]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9,3))
     ax1.plot(epochs, train_loss, '-o', ms=2, label='Train loss')
@@ -253,6 +310,15 @@ def show_log(logger):
 
     display.clear_output(wait=True)
     plt.show()
+
+def predict_and_save_val_img(runner, epoch, img_idx, run_path):
+
+    img, _ = runner.ds_valid[img_idx]
+    output = runner.predict(img.unsqueeze(0))
+    prediction = torch.argmax(output, dim=1)
+    prediction = 255*prediction/(runner.num_classes-1)
+    pil_img = Image.fromarray(prediction.squeeze().to(torch.uint8).numpy())
+    pil_img.save(run_path/'images'/f'idx_{img_idx}_epoch_{epoch}.png')
 
 def save_params(store):
     """Annotator for saving function parameters."""
