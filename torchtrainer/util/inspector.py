@@ -1,9 +1,9 @@
 """Inspector class for inspecting models parameters, gradients and activations"""
 
-import torch
-import torch.nn as nn
 from collections.abc import Callable
 from typing import Optional, Union
+import torch
+import torch.nn as nn
 
 class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation gradients."""

@@ -1,9 +1,9 @@
 '''Utility functions and classes for working with Pytorch modules'''
 
-from torch import nn
 from collections import OrderedDict
-import torch
 import copy
+from torch import nn
+import torch
 
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 

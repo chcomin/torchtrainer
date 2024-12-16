@@ -2,7 +2,7 @@
 
 from torch import nn
 from .layers import BasicBlock, Upsample, Concat, conv3x3, conv1x1
-from..util.module_util import Hook
+from ..util.module_util import Hook
 
 class UNetCustom(nn.Module):
     """U-Net with residual blocks. Please see the Models notebook for an in-depth explanation of the parameters.
