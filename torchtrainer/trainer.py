@@ -14,7 +14,6 @@ from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save
 from torchtrainer.util.train_util import ParseKwargs, ParseText
 from torchtrainer.metrics import ConfusionMatrixMetrics
 
-
 # TODO: wandb 
 # TODO: profiling
 
@@ -160,6 +159,8 @@ class DefaultTrainer:
         1. Do not include "--" before parameter names. 
         2. All values except single int or float numbers should be strings.
         3. The value of boolean parameters should be an empty string, e.g. 'bool-par': ''.
+        4. In general, values with spaces are invalid since arguments are split by spaces.
+           The only exceptions are arguments with nargs set in the parser.
 
         Parameters
         ----------
@@ -266,8 +267,11 @@ class DefaultTrainer:
         else:
             raise ValueError(f'Loss function {loss_function} not recognized')
 
+        conf_metrics = ConfusionMatrixMetrics(ignore_index)
+        # conf_metrics() returns 5 values. To set names to these
+        # values, we need to wrap it in a WrapDict object.
         perf_funcs = [
-            WrapDict(ConfusionMatrixMetrics(ignore_index), ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
+            WrapDict(conf_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
         ]
 
         logger = Logger()
@@ -402,7 +406,6 @@ class DefaultTrainer:
         compare = operator.gt if maximize else operator.lt
         best_val_metric = -torch.inf if maximize else torch.inf
 
-        checkpoint = runner.state_dict()
         epochs_without_improvement = 0
         print("Training has started")
         pbar = tqdm(
@@ -456,7 +459,7 @@ class DefaultTrainer:
                         epochs_without_improvement = 0
                     else:
                         epochs_without_improvement += 1
-                        # No improvement for `patience`` epochs
+                        # No improvement for `patience`` validations
                         if epochs_without_improvement>args.patience:
                             break
 
@@ -560,7 +563,7 @@ class DefaultTrainer:
         group = parser.add_argument_group('Training parameters')
         group.add_argument('--num-epochs', type=int, default=2, metavar='N', help='Number of training epochs')
         group.add_argument('--validation-metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
-        group.add_argument('--patience', type=int, default=50, metavar='N', help='Finish training if validation metric does not improve for N epochs')
+        group.add_argument('--patience', type=int, default=50, metavar='N', help='Finish training if the validation metric does not improve for N validation steps')
         group.add_argument('--maximize-validation-metric', action='store_true', 
                            help='If set, early stopping will maximize the validation metric instead of minimizing')
         group.add_argument('--lr', type=float, default=0.01, metavar='V', help='Initial learning rate')

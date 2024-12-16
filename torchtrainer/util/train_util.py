@@ -13,8 +13,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
 
 class Logger:
-    """ Class for logging metrics during training and validation.
-    """
+    """ Class for logging metrics during training and validation. """
 
     def __init__(self): 
         self.epoch_data = {}
@@ -24,7 +23,11 @@ class Logger:
         
             
     def log(self, epoch, batch_idx, name, value, weight=1):
-        """ Log a metric value for a given batch.
+        """ Log a metric value for a given batch. 
+        
+        The values are logged into the batch_data attribute of the class. When 
+        the method epoch_end() is called, the values are averaged over the batches 
+        and stored in the epoch_data attribute. The batch metrics are then erased.
 
         Parameters
         ----------
@@ -33,7 +36,7 @@ class Logger:
         name: Name of the metric
         value : Value to be logged
         weight: Weight assigned to the value when averaging over the whole epoch.
-        Usually, this is the batch size because `value` was is an average over the
+        Usually, this is the batch size because `value` is an average over a
         batch
         """
 
@@ -76,7 +79,8 @@ class Logger:
 
     def end_epoch(self):
         """ Calculate the average of the logged values over the batches for the 
-        current epoch and store them.
+        current epoch and store them in the epoch_data attribute. The batch 
+        metrics are erased.
         """
 
         current_epoch = self.current_epoch
