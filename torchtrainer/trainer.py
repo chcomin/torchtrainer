@@ -460,7 +460,6 @@ class DefaultTrainer:
                         if epochs_without_improvement>args.patience:
                             break
 
-                    print(f"{val_metric=}, {best_val_metric=}, {epochs_without_improvement=}")
         except KeyboardInterrupt:
             # This exception allows interrupting the training loop with Ctrl+C,
             # but sometimes it does not work due to the multiprocessing DataLoader
