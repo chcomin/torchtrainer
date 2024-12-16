@@ -263,6 +263,49 @@ class ParseKwargs(argparse.Action):
                 kw[key] = str(value)  # fallback to string (avoid need to escape on command line)
         setattr(namespace, self.dest, kw)
 
+class ParseText(argparse.Action):
+    """Class to use when parsing a text from the command line."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        text = ' '.join(values)
+        setattr(namespace, self.dest, text)
+
+def dict_to_argv(param_dict: dict, positional_args: list | None) -> list:
+    """Convert a dictionary to a list mimicking an argv list received by a
+    python program from the command line.
+
+    Parameters
+    ----------
+    param_dict
+        The parameter dictionary
+    positional_args
+        List of positional arguments names. This is necessary because the keys
+        of positional arguments are not used in the command line.
+
+    Returns
+    -------
+        List of strings with the parameters
+    """
+
+    if positional_args is None:
+        positional_args = []
+
+    sys_argv = []
+    # Extract positional arguments and put them first
+    for k in positional_args:
+        sys_argv.append(param_dict[k])
+        del param_dict[k]
+
+    for k, v in param_dict.items():
+        sys_argv.append(f"--{k}")
+        # If the argument is boolean, the value should be empty
+        if v!='' and v is not None:
+            # Dictionary values are allowed to be int or float, but command line
+            # arguments are always strings
+            v = str(v)
+            sys_argv.extend(v.split())
+
+    return sys_argv
+
 def seed_all(seed):
     """
     Seed all random number generators for reproducibility. If deterministic is

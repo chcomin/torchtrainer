@@ -1,8 +1,7 @@
 import torch
 
-# Aliases just to remind that tensors can be on CPU or GPU
-type CpuTensor = torch.Tensor
-type CudaTensor = torch.Tensor
+# Alias just to remind that tensors can be on CPU or GPU
+type CpuOrCudaTensor = torch.Tensor
 
 class ConfusionMatrixMetrics:
     """Calculate accuracy, precision, recall, IoU and Dice scores for a batch
@@ -18,8 +17,8 @@ class ConfusionMatrixMetrics:
 
     def __call__(
             self, 
-            scores: CpuTensor | CudaTensor, 
-            targets: CpuTensor | CudaTensor
+            scores: CpuOrCudaTensor, 
+            targets: CpuOrCudaTensor
             ) -> tuple[float, float, float, float, float]:
         """
         Parameters
@@ -34,8 +33,8 @@ class ConfusionMatrixMetrics:
 
 @torch.no_grad()
 def confusion_matrix_metrics(
-        scores: CpuTensor | CudaTensor, 
-        targets: CpuTensor | CudaTensor, 
+        scores: CpuOrCudaTensor, 
+        targets: CpuOrCudaTensor, 
         ignore_index: int | None = None
         ) -> tuple[float, float, float, float, float]:
     """Calculate accuracy, precision, recall, IoU and Dice scores for a batch

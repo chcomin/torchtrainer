@@ -5,15 +5,15 @@ from datetime import datetime
 import operator
 import yaml
 from tqdm.auto import tqdm
-import pandas as pd
 import torch
 from torch import nn
 import torch.utils
 from torch.utils.data import DataLoader
-from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict
+from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
 from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_img
+from torchtrainer.util.train_util import ParseKwargs, ParseText
 from torchtrainer.metrics import ConfusionMatrixMetrics
-from torchtrainer.util.train_util import ParseKwargs
+
 
 # TODO: wandb 
 # TODO: profiling
@@ -81,8 +81,6 @@ class DefaultModuleRunner:
 
             self.logger.log(epoch, batch_idx, 'Train loss', loss.detach(), imgs.shape[0])
 
-            #if (batch_idx+1)%self.print_every == 0:
-            #    pass
         # Log learning rate
         self.logger.log_epoch(epoch, 'lr', self.optim.param_groups[0]['lr'])
         self.scheduler.step()
@@ -121,10 +119,13 @@ class DefaultModuleRunner:
         """
         
         model = self.model
+        training = model.training
         batch_device = batch.device
 
         model.eval()
         output = model(batch.to(self.device)).to(batch_device)
+
+        model.train(training)
 
         return output
     
@@ -134,6 +135,7 @@ class DefaultModuleRunner:
             'model':self.model.state_dict(),
             'optim':self.optim.state_dict(),
             'sched':self.scheduler.state_dict(),
+            'scaler':self.scaler.state_dict(),
             'logger':self.logger.epoch_data,
         }
 
@@ -142,23 +144,30 @@ class DefaultModuleRunner:
 class DefaultTrainer:
     """Class for setting up all components of a training experiment."""
 
-    def __init__(self, commandline_string: str | None = None):
+    def __init__(self, param_dict: dict | None = None):
         """
         This class can be initialized from the command line as 
         
-        python train.py --param1 value1 --param2 value2...
+        python trainer.py --param1 value1 --param2 value2...
 
-        or from another python script or notebook as
+        or from a python script or notebook using a dictionary:
 
-        Trainer('--param1 value1 --param2 value2...')
+        params = {param1:value1, param2:value2, ...}
+        DefaultTrainer(params)
+
+        When using a dictionary:
+        
+        1. Do not include "--" before parameter names. 
+        2. All values except single int or float numbers should be strings.
+        3. The value of boolean parameters should be an empty string, e.g. 'bool-par': ''.
 
         Parameters
         ----------
-        commandline_string
+        param_dict
             If None, uses the command line arguments.
         """
 
-        args = self.get_args(commandline_string)
+        args = self.get_args(param_dict)
 
         seed_all(args.seed)     
 
@@ -194,6 +203,8 @@ class DefaultTrainer:
 
         if args.save_val_img:
             Path.mkdir(run_path/'images', exist_ok=True)
+        if args.copy_model_every:
+            Path.mkdir(run_path/'models', exist_ok=True)
 
         # Register training start time
         config_dict = vars(args)
@@ -220,7 +231,7 @@ class DefaultTrainer:
 
         args = self.args
         # Command line arguments that can be used here:
-        dataset_name = args.dataset_name
+        dataset_class = args.dataset_class
         dataset_path = args.dataset_path
         split_strategy = args.split_strategy
         augmentation_strategy = args.augmentation_strategy
@@ -230,14 +241,14 @@ class DefaultTrainer:
 
         seed_all(args.seed)
 
-        if dataset_name=='oxford_pets':
+        if dataset_class=='oxford_pets':
             from torchtrainer.datasets.oxford_pets import get_dataset
 
             split = float(split_strategy)
             ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
             class_weights, ignore_index, collate_fn = dataset_props
         else:
-            raise ValueError(f'Dataset {dataset_name} not recognized')
+            raise ValueError(f'Dataset {dataset_class} not recognized')
         
         # Can be used to test the code with a smaller dataset
         #ds_train = [ds_train[idx] for idx in range(2*args.bs_train)]
@@ -260,7 +271,7 @@ class DefaultTrainer:
         ]
 
         logger = Logger()
-        # How to group the data when plotting, each groups becomes an individual plot
+        # How to group the data when plotting, each group becomes an individual plot
         logger_plotter = LoggerPlotter([
             {'names': ['Train loss', 'Validation loss'], 'y_max': 1.},
             {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'], 'y_max': 1.}
@@ -292,8 +303,12 @@ class DefaultTrainer:
 
             model = get_model(**model_params, num_classes=num_classes, 
                               weights_strategy=weights_strategy)
+        elif model_name=='test_model':
+            from torchtrainer.models.testing import TestSegmentation
+
+            model = TestSegmentation(num_channels=num_channels, num_classes=num_classes)
         else:
-            raise ValueError(f'Model {model} not recognized')
+            raise ValueError(f'Model {model_name} not recognized')
                 
         self.module_runner.add_model_elements(model)
         
@@ -377,7 +392,6 @@ class DefaultTrainer:
         logger = runner.logger
         logger_plotter = runner.logger_plotter
         run_path = self.run_path
-        evaluate_every = args.evaluate_every
 
         seed_all(args.seed)
 
@@ -390,7 +404,6 @@ class DefaultTrainer:
 
         checkpoint = runner.state_dict()
         epochs_without_improvement = 0
-        was_interrupted = False
         print("Training has started")
         pbar = tqdm(
             range(args.num_epochs),
@@ -403,14 +416,21 @@ class DefaultTrainer:
         try:
             for epoch in pbar:
                 runner.train_one_epoch(epoch)
-                if epoch==0 or epoch%evaluate_every==0:
-                    runner.validate_one_epoch(epoch)
-                # Aggregate batch metrics into epoch metrics
-                logger.end_epoch()
+                validate = epoch==0 or epoch==args.num_epochs-1 or epoch%args.validate_every==0
 
+                if validate:
+                    runner.validate_one_epoch(epoch)
+
+                # Aggregate batch metrics into epoch metrics and get the data
+                logger.end_epoch()
                 logger_data = logger.get_data()
                 last_metrics = logger_data.iloc[-1]
-                pbar.set_postfix(last_metrics[['Train loss', 'Validation loss', val_metric_name]].to_dict()) 
+
+                # Set the metrics to be displayed in the progress bar
+                tqdm_metrics = ['Train loss']
+                if validate:
+                    tqdm_metrics += ['Validation loss', val_metric_name]
+                pbar.set_postfix(last_metrics[tqdm_metrics].to_dict()) 
 
                 # Save logged data
                 logger_data.to_csv(run_path/'log.csv', index=False)
@@ -419,10 +439,12 @@ class DefaultTrainer:
                 
                 checkpoint = runner.state_dict()
 
-                if (epoch+1)%args.save_every==0:
-                    torch.save(checkpoint, run_path/'checkpoint.pt')
+                # Save the checkpoint and a copy of it if required
+                torch.save(checkpoint, run_path/'checkpoint.pt')
+                if args.copy_model_every and epoch%args.copy_model_every==0:
+                    torch.save(checkpoint, run_path/'models'/f'checkpoint_{epoch}.pt')
 
-                if epoch==0 or epoch%evaluate_every==0:
+                if validate:
                     if args.save_val_img:
                         predict_and_save_val_img(runner, epoch, args.val_img_idx, run_path)                  
 
@@ -437,15 +459,14 @@ class DefaultTrainer:
                         # No improvement for `patience`` epochs
                         if epochs_without_improvement>args.patience:
                             break
+
+                    print(f"{val_metric=}, {best_val_metric=}, {epochs_without_improvement=}")
         except KeyboardInterrupt:
             # This exception allows interrupting the training loop with Ctrl+C,
             # but sometimes it does not work due to the multiprocessing DataLoader
-            was_interrupted = True
+            pass
 
         print("Training has finished")
-            
-        # Save the last checkpoint in case save_every is not multiple of num_epochs
-        torch.save(checkpoint, run_path/'checkpoint.pt')
 
         # Include training end time in the config file
         config_dict = vars(args)
@@ -454,14 +475,13 @@ class DefaultTrainer:
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
         open(run_path/'config.yaml', 'w').write(args_yaml)
 
-    def get_args(self, commandline_string: str | None = None) -> argparse.Namespace:
-        """Parse command line arguments or arguments from a string. Adapted from
-        the timm training script
+    def get_args(self, param_dict: dict | None = None) -> argparse.Namespace:
+        """Parse command line arguments or arguments from a string.
 
         Parameters
         ----------
-        commandline_string
-            A string containing the command line arguments to parse.
+        param_dict
+            A dictionary containing the command line arguments to parse.
 
         Returns
         -------
@@ -469,14 +489,17 @@ class DefaultTrainer:
             An argparse namespace object containing the parsed arguments
         """
 
-        if commandline_string is not None:
-            commandline_string = commandline_string.split()
+        if param_dict is None:
+            sys_argv = None
+        else:
+            positional_args = ['dataset-path', 'dataset-class', 'model-name']
+            sys_argv = dict_to_argv(param_dict, positional_args)
 
         parser, config_parser = self.get_parser()
 
         # If option --config was used, load the respective yaml file and set
         # the values for the main parser
-        args_config, remaining = config_parser.parse_known_args(commandline_string)
+        args_config, remaining = config_parser.parse_known_args(sys_argv)
         if args_config.config:
             with open(args_config.config, 'r') as f:
                 cfg = yaml.safe_load(f)
@@ -496,60 +519,64 @@ class DefaultTrainer:
         config_parser.add_argument('--config', default='', metavar='FILE',
                             help='Path to YAML config file specifying default arguments')
 
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description='Below, N represents integer values and V represents float values')
 
         # Logging parameters
         group = parser.add_argument_group('Logging parameters')
-        group.add_argument('-p', '--experiments-path', default='experiments', help='Path to save experiments data')
-        group.add_argument('-e', '--experiment-name', default='no_name_experiment', help='Name of the experiment')
-        group.add_argument('-n', '--run-name', default='no_name_run', help='Name of the run for a given experiment')
-        group.add_argument('--evaluate-every', type=int, default=1, help='Run a validation epoch every n epochs')
-        group.add_argument('--save-every', type=int, default=1, help='Save model checkpoint every n epochs')
-        group.add_argument('--save-val-img', action='store_true', help='Save a validation image every epoch')
-        group.add_argument('--val-img-idx', type=int, default=0, help='Index of the validation image to save')
-        group.add_argument('--meta', default='', help='Additional metadata to save in the config.json file describing the experiment')
-        
+        group.add_argument('-p', '--experiments-path', default='experiments', metavar='PATH', help='Path to save experiments data')
+        group.add_argument('-e', '--experiment-name', default='no_name_experiment', metavar='NAME', help='Name of the experiment')
+        group.add_argument('-n', '--run-name', default='no_name_run', metavar='NAME', help='Name of the run for a given experiment')
+        group.add_argument('--validate-every', type=int, default=1, metavar='N', help='Run a validation step every N epochs')
+        group.add_argument('--save-val-img', action='store_true', help='Save a validation image when validating')
+        group.add_argument('--val-img-idx', type=int, default=0, metavar='N', help='Index of the validation image to save')
+        group.add_argument('--copy-model-every', type=int, default=0, metavar='N', 
+                           help='Save a copy of the model every N epochs. If 0 (default) no copies are saved')
+        parser.add_argument('--meta', default='', nargs='*', action=ParseText, help='Additional metadata to save in the config.json file '
+                            'describing the experiment. Whitespaces do not need to be escaped.')
+
         # Dataset parameters
         group = parser.add_argument_group('Dataset parameters')
-        group.add_argument('-d', '--dataset-name', help='Name of the dataset')
-        group.add_argument('-r', '--dataset-path', help='Path to the dataset root directory')        
-        group.add_argument('--split-strategy', default='0.2', 
+        group.add_argument('dataset_path', help='Path to the dataset root directory')        
+        group.add_argument('dataset_class', help='Name of the dataset class to use')
+        group.add_argument('--split-strategy', default='0.2',  metavar='STRING',
                         help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
-        group.add_argument('--augmentation-strategy', help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
-        group.add_argument('--resize-size', default=(384,384), nargs=2, type=int, help='Size to resize the images')
-        group.add_argument('--dataset-params', nargs='*', default={}, action=ParseKwargs,
-                        help='Additional parameters to pass to the dataset creation function. E.g. --dataset-params a=1 b=2 c=3'
+        group.add_argument('--augmentation-strategy', default=None, metavar='STRING', 
+                           help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
+        group.add_argument('--resize-size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), help='Size to resize the images. E.g. --resize-size 128 128')
+        group.add_argument('--dataset-params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the dataset creation function. E.g. --dataset-params par1=v1 par2=v2 par3=v3. '
                         'The additional parameters are evaluated as Python code and cannot contain spaces.')
-        group.add_argument('--loss-function', default='cross_entropy', help='Loss function to use during training')
+        group.add_argument('--loss-function', default='cross_entropy', metavar='LOSS', help='Loss function to use during training')
         group.add_argument('--ignore-class-weights', action='store_true', help='If provided, ignore class weights for the loss function')
-        
+
         # Model parameters
         group = parser.add_argument_group('Model parameters')
-        group.add_argument('-m', '--model-name', help='Name of the model to train')
-        group.add_argument('--weights-strategy', 
+        group.add_argument('model_name', help='Name of the model to train')
+        group.add_argument('--weights-strategy', default=None, metavar='STRING', 
             help='This argument is sent to the model creation function and can be used to define how to load the weights')
-        group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs,
-                        help='Additional parameters to pass to the model creation function. E.g. --model-params a=1 b=2 c=3')
-        
+        group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the model creation function. E.g. --model-params par1=v1 par2=v2 par3=v3')
+
         # Training parameters
         group = parser.add_argument_group('Training parameters')
-        group.add_argument('--num-epochs', type=int, default=2, help='Number of training epochs')
-        group.add_argument('--validation-metric', default='Validation loss', help='Which metric to use for early stopping')
-        group.add_argument('--patience', type=int, default=50, help='Finish training if validation metric does not improve for `patience` epochs')
-        group.add_argument('--maximize-validation-metric', action='store_true', help='If set, early stopping will maximize the validation metric instead of minimizing')
-        group.add_argument('--lr', type=float, default=0.01, help='Initial learning rate')
-        group.add_argument('--lr-decay', type=float, default=1., help='Learning rate decay')
-        group.add_argument('--bs-train', type=int, default=32, help='Batch size used durig training')
-        group.add_argument('--bs-valid', type=int, default=8, help='Batch size used durig validation')
-        group.add_argument('--weight-decay', type=float, default=1e-4, help='Weight decay for the optimizer')
+        group.add_argument('--num-epochs', type=int, default=2, metavar='N', help='Number of training epochs')
+        group.add_argument('--validation-metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
+        group.add_argument('--patience', type=int, default=50, metavar='N', help='Finish training if validation metric does not improve for N epochs')
+        group.add_argument('--maximize-validation-metric', action='store_true', 
+                           help='If set, early stopping will maximize the validation metric instead of minimizing')
+        group.add_argument('--lr', type=float, default=0.01, metavar='V', help='Initial learning rate')
+        group.add_argument('--lr-decay', type=float, default=1., metavar='V', help='Learning rate decay')
+        group.add_argument('--bs-train', type=int, default=32, metavar='N', help='Batch size used durig training')
+        group.add_argument('--bs-valid', type=int, default=8, metavar='N', help='Batch size used durig validation')
+        group.add_argument('--weight-decay', type=float, default=1e-4, metavar='V', help='Weight decay for the optimizer')
         group.add_argument('--optimizer', default='sgd', help='Optimizer to use')
-        group.add_argument('--momentum', type=float, default=0.9, help='Momentum of the optimizer')
-        group.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-        
+        group.add_argument('--momentum', type=float, default=0.9, metavar='V', help='Momentum/beta1 of the optimizer')
+        group.add_argument('--seed', type=int, default=0, metavar='N', help='Seed for the random number generator')
+
         # Device and efficiency parameters
         group = parser.add_argument_group('Device and efficiency parameters')
         group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
-        group.add_argument('--num-workers', type=int, default=5, help='Number of workers for the DataLoader')
+        group.add_argument('--num-workers', type=int, default=5, metavar='N', help='Number of workers for the DataLoader')
         group.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
         group.add_argument('--deterministic', action='store_true', help='If deterministic algorithms should be used')
         group.add_argument('--benchmark', action='store_true', help='If cuda benchmark should be used')

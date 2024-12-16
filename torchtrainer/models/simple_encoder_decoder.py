@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 from torch import nn
 import torch.nn.functional as F
+import torchvision
 from torchvision.models import resnet18, ResNet18_Weights
 
 def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
@@ -124,15 +125,18 @@ class SimpleEncoderDecoder(nn.Module):
 
         return x
 
-def get_model(decoder_channels=64, num_classes=2, weights_strategy=None):
+def get_model(encoder_name='resnet18', decoder_channels=64, num_classes=2, weights_strategy=None):
 
     if weights_strategy=="encoder":
         # Load only encoder weights
-        weights = ResNet18_Weights.DEFAULT
+        weights = "DEFAULT"
     else:
         weights = None
 
-    encoder = resnet18(weights=weights)
+    encoder = torch.hub.load("pytorch/vision", encoder_name, weights=weights, verbose=False)
+
+    #encoder = torchvision.models.get_model(encoder_name)
+    #encoder = resnet18(weights=weights)
     model = SimpleEncoderDecoder(encoder, decoder_channels=decoder_channels, 
                                  num_classes=num_classes)  
 
