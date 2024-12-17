@@ -10,7 +10,7 @@ from torch import nn
 import torch.utils
 from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
-from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_img
+from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_imgs
 from torchtrainer.util.train_util import ParseKwargs, ParseText
 from torchtrainer.metrics import ConfusionMatrixMetrics
 
@@ -202,8 +202,11 @@ class DefaultTrainer:
         Path.mkdir(run_path, parents=True, exist_ok=True)
         self.run_path = run_path
 
-        if args.save_val_img:
+        if args.save_val_imgs:
             Path.mkdir(run_path/'images', exist_ok=True)
+            for idx in args.val_img_indices:
+                Path.mkdir(run_path/'images'/f'image_{idx}', exist_ok=True)
+            
         if args.copy_model_every:
             Path.mkdir(run_path/'models', exist_ok=True)
 
@@ -216,28 +219,47 @@ class DefaultTrainer:
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
         open(run_path/'config.yaml', 'w').write(args_yaml)
 
-    def setup_dataset(self):
-        """ 
-        Setup the dataset and related elements.
-        Each dataset must have a respective get_dataset function. This section of the
-        training script can be adapted to send the relevant parameters to get_dataset
+    def get_dataset(
+            self, 
+            dataset_class, 
+            dataset_path, 
+            split_strategy, 
+            resize_size, 
+            augmentation_strategy, 
+            **dataset_params):
+        """This method receives dataset parameters received from the command line
+        and returns the training and validation datasets as well as relevant dataset 
+        properties.
 
-        All datasets must return:
-        - Train and validation datasets
+        Subclasses of the Trainer class must implement this method when using a
+        dataset that is not recognized by the script.
+
+        This method must return:
+        - The training and validation datasets
         - The class weights
         - If a value should be ignored in the target (ignore_index)
         - A collate function indicating how to batch the data
         ignore_index and collate_fn can be None.
         """
+        
+        raise NotImplementedError(
+            "When `dataset_class` is not one of the default datasets, the get_dataset "
+            "method must be implemented in the Trainer subclass")
+
+        # Example returns
+        ds_train, ds_valid, class_weights, ignore_index, collate_fn = (None,)*5
+
+        return ds_train, ds_valid, class_weights, ignore_index, collate_fn
+
+    def setup_dataset(self):
+        """ Setup the dataset and related elements."""
 
         args = self.args
-        # Command line arguments that can be used here:
         dataset_class = args.dataset_class
         dataset_path = args.dataset_path
         split_strategy = args.split_strategy
-        augmentation_strategy = args.augmentation_strategy
         resize_size = args.resize_size
-        # A dictionary with additional parameters that can be passed to get_dataset
+        augmentation_strategy = args.augmentation_strategy
         dataset_params = args.dataset_params
 
         seed_all(args.seed)
@@ -249,7 +271,14 @@ class DefaultTrainer:
             ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
             class_weights, ignore_index, collate_fn = dataset_props
         else:
-            raise ValueError(f'Dataset {dataset_class} not recognized')
+            # If the dataset is not recognized, the get_dataset method must be implemented
+            ds_train, ds_valid, class_weights, ignore_index, collate_fn = self.get_dataset(
+                dataset_class, 
+                dataset_path, 
+                split_strategy, 
+                resize_size, 
+                augmentation_strategy, 
+                **dataset_params)
         
         # Can be used to test the code with a smaller dataset
         #ds_train = [ds_train[idx] for idx in range(2*args.bs_train)]
@@ -288,6 +317,23 @@ class DefaultTrainer:
             ds_train, ds_valid, num_classes, num_channels, 
             collate_fn, loss_func, perf_funcs, logger, logger_plotter)
 
+    def get_model(self, model_name, weights_strategy, num_classes, num_channels, **model_params):
+        """This method receives model parameters received from the command line
+        and returns the model.
+
+        Subclasses of the Trainer class must implement this method when using a
+        model that is not recognized by the script.
+        """
+        
+        raise NotImplementedError(
+            "When `model_name` is not one of the default models, the get_model "
+            "method must be implemented in the Trainer subclass")
+
+        # Example return
+        model = None
+
+        return model
+
     def setup_model(self):
         """Model creation. Each model must have a respective get_model function."""
 
@@ -312,7 +358,7 @@ class DefaultTrainer:
 
             model = TestSegmentation(num_channels=num_channels, num_classes=num_classes)
         else:
-            raise ValueError(f'Model {model_name} not recognized')
+            model = self.get_model(model_name, weights_strategy, num_classes, num_channels, **model_params)
                 
         self.module_runner.add_model_elements(model)
         
@@ -448,8 +494,8 @@ class DefaultTrainer:
                     torch.save(checkpoint, run_path/'models'/f'checkpoint_{epoch}.pt')
 
                 if validate:
-                    if args.save_val_img:
-                        predict_and_save_val_img(runner, epoch, args.val_img_idx, run_path)                  
+                    if args.save_val_imgs:
+                        predict_and_save_val_imgs(runner, epoch, args.val_img_indices, run_path)                  
 
                     # Check for model improvement
                     val_metric = last_metrics[val_metric_name]
@@ -529,8 +575,8 @@ class DefaultTrainer:
         group.add_argument('-e', '--experiment-name', default='no_name_experiment', metavar='NAME', help='Name of the experiment')
         group.add_argument('-n', '--run-name', default='no_name_run', metavar='NAME', help='Name of the run for a given experiment')
         group.add_argument('--validate-every', type=int, default=1, metavar='N', help='Run a validation step every N epochs')
-        group.add_argument('--save-val-img', action='store_true', help='Save a validation image when validating')
-        group.add_argument('--val-img-idx', type=int, default=0, metavar='N', help='Index of the validation image to save')
+        group.add_argument('--save-val-imgs', action='store_true', help='Save some validation images when validating')
+        group.add_argument('--val-img-indices', nargs='*', type=int, default=(0,), metavar='N N N', help='Indices of the validation images to save')
         group.add_argument('--copy-model-every', type=int, default=0, metavar='N', 
                            help='Save a copy of the model every N epochs. If 0 (default) no copies are saved')
         parser.add_argument('--meta', default='', nargs='*', action=ParseText, help='Additional metadata to save in the config.json file '

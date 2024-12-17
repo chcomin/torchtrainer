@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchtrainer"
-version = "0.0.1"
+version = "1.0"
 authors = [
   { name="Cesar Comin"},
 ]
-description = "Helper modules for training neural networks with Pytorch."
+description = "Helper modules and a training script for working with neural networks with Pytorch."
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [

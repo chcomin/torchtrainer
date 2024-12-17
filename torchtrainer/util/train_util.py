@@ -304,7 +304,7 @@ def dict_to_argv(param_dict: dict, positional_args: list | None) -> list:
         # If the argument is boolean, the value should be empty
         if v!='' and v is not None:
             # Dictionary values are allowed to be int or float, but command line
-            # arguments are always strings
+            # arguments are always strings, so we need to convert them
             v = str(v)
             sys_argv.extend(v.split())
 
@@ -358,14 +358,15 @@ def show_log(logger):
     display.clear_output(wait=True)
     plt.show()
 
-def predict_and_save_val_img(runner, epoch, img_idx, run_path):
+def predict_and_save_val_imgs(runner, epoch, img_indices, run_path):
 
-    img, _ = runner.ds_valid[img_idx]
-    output = runner.predict(img.unsqueeze(0))
-    prediction = torch.argmax(output, dim=1)
-    prediction = 255*prediction/(runner.num_classes-1)
-    pil_img = Image.fromarray(prediction.squeeze().to(torch.uint8).numpy())
-    pil_img.save(run_path/'images'/f'idx_{img_idx}_epoch_{epoch}.png')
+    for img_idx in img_indices:
+        img, _ = runner.ds_valid[img_idx]
+        output = runner.predict(img.unsqueeze(0))
+        prediction = torch.argmax(output, dim=1)
+        prediction = 255*prediction/(runner.num_classes-1)
+        pil_img = Image.fromarray(prediction.squeeze().to(torch.uint8).numpy())
+        pil_img.save(run_path/'images'/f'image_{img_idx}'/f'epoch_{epoch}.png')
 
 def save_params(store):
     """Annotator for saving function parameters."""
