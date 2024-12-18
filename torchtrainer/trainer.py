@@ -353,6 +353,10 @@ class DefaultTrainer:
 
             model = get_model(**model_params, num_classes=num_classes, 
                               weights_strategy=weights_strategy)
+        elif model_name=='unet_lw':
+            from torchtrainer.models.unet_lw import get_model
+
+            model = get_model(num_channels=num_channels, num_classes=num_classes)
         elif model_name=='test_model':
             from torchtrainer.models.testing import TestSegmentation
 

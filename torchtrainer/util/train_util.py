@@ -169,28 +169,28 @@ class Subset(Dataset):
     """Create a new Dataset containing a subset of images from the input Dataset.
     """
 
-    def __init__(self, ds, indices, transform=None, **attributes):
+    def __init__(self, ds, indices, transforms=None, **attributes):
         """
         Args:
             ds : input Dataset
             indices: indices to use for the new dataset
-            transform: transformations to apply to the data. Defaults to None.
+            transforms: transformations to apply to the data. Defaults to None.
             attributes: additional attributes to store in the new dataset.
         """
 
         self.ds = ds
         self.indices = indices
-        self.transform = transform
+        self.transforms = transforms
         for k, v in attributes.items():
             setattr(self, k, v)
 
     def __getitem__(self, idx):
 
-        items = self.ds[self.indices[idx]]
-        if self.transform is not None:
-            items = self.transform(*items)
+        img, target = self.ds[self.indices[idx]]
+        if self.transforms is not None:
+            img, target = self.transforms(img, target)
 
-        return items
+        return img, target
 
     def __len__(self):
         return len(self.indices)

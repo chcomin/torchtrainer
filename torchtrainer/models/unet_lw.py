@@ -134,3 +134,9 @@ class UNetLW(nn.Module):
         for i, up in enumerate(self.up_path):
             x = up(x, down_activations[i])
         return self.final(x)
+    
+def get_model(layers=(8, 16, 32), k_sz=3, num_channels=1, num_classes=2):
+
+    model = UNetLW(in_c=num_channels, n_classes=num_classes, layers=layers, k_sz=k_sz)
+
+    return model

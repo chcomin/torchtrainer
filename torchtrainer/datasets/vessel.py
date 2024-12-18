@@ -1,430 +1,231 @@
-import os
+"""The objective of the dataset classes here is to provide the minimal code to load the
+images from the respective datasets. """
+
 from pathlib import Path
-from typing import Callable, Tuple
+import random
 import numpy as np
-from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
+from ..datasets.vessel_base import DRIVE
+from ..util.train_util import Subset
 
-class RetinaDataset(Dataset):
-    """Create a dataset object for holding a typical retina blood vessel dataset. 
 
-    Note: __getitem__ returns a numpy array and not a pillow image because pillow
-    does not support a negative ignore index (e.g. -100).
+import os.path as osp
+import pandas as pd
+from skimage import measure
+import torch
+from torchvision.transforms import v2 as tv_transf
+from torchvision.transforms.v2 import functional as tv_transf_F
+from torchvision import tv_tensors
 
-    Args:
-        root (str | Path): Root directory.
-        split (str): The split to use. Possible values are "train", "test" and
-            "all"
-        channels (str, optional): Image channels to use. Options are:
-            "all": Use all channels
-            "green": Use only the green channel
-            "gray": Convert the image to grayscale
-        keepdim (bool, optional): If True, keeps the channel dimension in case
-            `channels` is "green" or "gray"
-        return_mask (bool, optional): If True, also returns the retina mask
-        ignore_index (int | None, optional): Index to put at the labels for pixels
-            outside the mask (the retina). If None, do nothing.
-        normalize (bool, optional): If True, divide the labels by 255 in case
-            label.max()==255.
-        transforms (Callable | None, optional): Transformations to apply to
-            the images and the labels. If `return_mask` is True, the transform
-            needs to also accept the mask image as input.
-    """
-
-    _HAS_TEST = None
-
-    def __init__(
-        self,
-        root: str | Path,
-        split: str = "train",
-        channels: str = "all",
-        keepdim: bool = False,
-        return_mask: bool = False,
-        ignore_index: int | None = None,
-        normalize: bool = True,
-        transforms: Callable | None = None,
-    ) -> None:
-        
-        self.root = Path(root)
-        if split=="test" and not self._HAS_TEST:
-            raise ValueError("This dataset does not have a test split.")
-
-        if split=="all":
-            images, labels, masks = self._get_files(split="train")
-            if self._HAS_TEST:
-                images_t, labels_t, masks_t = self._get_files(split="test")
-                images += images_t
-                labels += labels_t
-                masks += masks_t
-        else:
-            images, labels, masks = self._get_files(split=split)
-
+class TrainDataset(Dataset):
+    def __init__(self, csv_path, transforms=None, channels='all'):
+        df = pd.read_csv(csv_path)
+        self.root = osp.dirname(csv_path)
+        self.im_list = df.im_paths
+        self.gt_list = df.gt_paths
+        self.mask_list = df.mask_paths
+        self.transforms = transforms
         self.channels = channels
-        self.keepdim = keepdim
-        self.return_mask = return_mask
-        self.ignore_index = ignore_index
-        self.normalize = normalize
+        self.label_values = (0, 255)  # for use in label_encoding
 
-        self.images = images
-        self.labels = labels
-        self.masks = masks
-        self.classes = ["background", "vessel"]
-        self.transforms = transforms
+    def label_encoding(self, gdt):
+        gdt_gray = np.array(gdt.convert('L'))
+        classes = np.arange(len(self.label_values))
+        for i in classes:
+            gdt_gray[gdt_gray == self.label_values[i]] = classes[i]
+        return Image.fromarray(gdt_gray)
 
-    def __getitem__(self, idx: int) -> Tuple:
-        
-        image = Image.open(self.images[idx])
-        label = np.array(Image.open(self.labels[idx]), dtype=int)
-        mask = np.array(Image.open(self.masks[idx]))
+    def crop_to_fov(self, img, target, mask):
+        minr, minc, maxr, maxc = measure.regionprops(np.array(mask))[0].bbox
+        im_crop = Image.fromarray(np.array(img)[minr:maxr, minc:maxc])
+        tg_crop = Image.fromarray(np.array(target)[minr:maxr, minc:maxc])
+        mask_crop = Image.fromarray(np.array(mask)[minr:maxr, minc:maxc])
+        return im_crop, tg_crop, mask_crop
 
-        # Select green channel or convert to gray
-        if self.channels=="gray":
-            image = image.convert('L')
-        image = np.array(image)
-        if self.channels=="green":
-            image = image[:,:,1]
-        if self.keepdim and image.ndim==2:
-            image = np.expand_dims(image, axis=2)
+    def __getitem__(self, index):
+        # load image and labels
+        img = Image.open(osp.join(self.root,self.im_list[index]))
+        target = Image.open(osp.join(self.root,self.gt_list[index]))
+        mask = Image.open(osp.join(self.root,self.mask_list[index])).convert('L')
 
-        # Normalize label to [0,1] if in range [0,255]
-        if self.normalize and label.max()==255:
-            label = label//255
-            mask = mask//255
+        if self.channels=='gray':
+            img = img.convert('L')
+        elif self.channels=='green':
+            img = Image.fromarray(np.array(img)[:,:,1])
 
-        # Keep only first label channel if it is a color image
-        if label.ndim==3:
-            diff_pix = (label[:,:,0]!=label[:,:,1]).sum()
-            diff_pix += (label[:,:,0]!=label[:,:,2]).sum()
-            if diff_pix>0:
-                raise ValueError("Label has multiple channels and they differ.")
-            label = label[:,:,0]
+        img, target, mask = self.crop_to_fov(img, target, mask)
 
-        # Put ignore_index outside mask
-        if self.ignore_index is not None:
-            label[mask==0] = self.ignore_index
+        target = np.array(self.label_encoding(target))
 
-        output = image, label
-        # Remember to also transform mask
-        if self.return_mask:
-            output += (mask,)
-        if self.transforms is not None:
-            output = self.transforms(*output)
-
-        return output
-
-    def __len__(self) -> int:
-        return len(self.images)
-    
-    def _get_files(self, split: str):
-
-        raise NotImplementedError
-
-class DRIVE(RetinaDataset):
-    """Create a dataset object for holding the DRIVE data. The dataset must 
-    be organized as
-    root
-      training
-        images
-        1st_manual
-        mask
-      test
-        images
-        1st_manual
-        mask
-
-    See the RetinaDataset docs for an explanation of the parameters.
-    """
-
-    _HAS_TEST = True
-    
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
-
-        if split=="train":
-            root_split = self.root/"training"
-            mask_str = "training"
-        elif split=="test":
-            root_split = self.root/"test"
-            mask_str = "test"
-
-        root_imgs = root_split/"images"
-        root_labels = root_split/"1st_manual"
-        root_masks = root_split/"mask"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        masks = []
-        for file in files:
-
-            num, _ = file.split('_')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{num}_manual1.gif")
-            masks.append(root_masks/f"{num}_{mask_str}_mask.gif")
-
-        return images, labels, masks
-    
-class CHASEDB1(RetinaDataset):
-    """Create a dataset object for holding the CHASEDB1 data. The dataset must 
-    be organized as
-    root
-      images
-      labels
-      mask
-
-    See the RetinaDataset docs for an explanation of the parameters. Note that
-    the CHASE dataset does not have a train/test split.
-    """
-
-    _HAS_TEST = False
-    
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
-
-        root_imgs = self.root/"images"
-        root_labels = self.root/"labels"
-        root_masks = self.root/"mask"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        masks = []
-        for file in files:
-
-            filename, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filename}_1stHO.png")
-            masks.append(root_masks/f"{filename}.png")
-
-        return images, labels, masks
-    
-class STARE(RetinaDataset):
-    """Create a dataset object for holding the STARE data. The dataset must 
-    be organized as
-    root
-      images
-      labels
-      mask
-
-    See the RetinaDataset docs for an explanation of the parameters. Note that
-    the STARE dataset does not have a train/test split.
-    """
-
-    _HAS_TEST = False
-    
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
-
-        root_imgs = self.root/"images"
-        root_labels = self.root/"labels"
-        root_masks = self.root/"mask"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        masks = []
-        for file in files:
-
-            filename, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filename}.ah.png")
-            masks.append(root_masks/f"{filename}.png")
-
-        return images, labels, masks
-    
-class HRF(RetinaDataset):
-    """Create a dataset object for holding the HRF data. The dataset must 
-    be organized as
-    root
-      images
-      labels
-      mask
-
-    See the RetinaDataset docs for an explanation of the parameters. Note that
-    the HRF dataset does not have a train/test split.
-    """
-
-    _HAS_TEST = False
-    
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
-
-        root_imgs = self.root/"images"
-        root_labels = self.root/"labels"
-        root_masks = self.root/"mask"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        masks = []
-        for file in files:
-
-            filename, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filename}.tif")
-            masks.append(root_masks/f"{filename}_mask.tif")
-
-        return images, labels, masks
-    
-class FIVES(RetinaDataset):
-    """Create a dataset object for holding the FIVES data. The dataset must 
-    be organized as
-    root
-      train
-        images
-        labels
-      test
-        images
-        labels
-    mask.png
-
-    See the RetinaDataset docs for an explanation of the parameters.
-    """
-
-    _HAS_TEST = True
-    
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
-
-        if split=="train":
-            root_split = self.root/"train"
-        elif split=="test":
-            root_split = self.root/"test"
-
-        root_imgs = root_split/"images"
-        root_labels = root_split/"labels"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        masks = []
-        for file in files:
-
-            filname, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filname}.png")
-            masks.append(self.root/"mask.png")
-
-        return images, labels, masks
-    
-class VessMAP(Dataset):
-    """Create a dataset object for holding the VessMAP data. 
-
-    Args:
-        root (str | Path): Root directory.
-        keepdim (bool, optional): If True, keeps the channel dimension.
-        transforms (Callable | None, optional): Transformations to apply to
-        the images and the labels. 
-    """
-
-    def __init__(
-        self,
-        root: str | Path,
-        keepdim: bool = False,
-        transforms: Callable | None = None,
-    ) -> None:
-        
-        self.root = root
-
-        images, labels = self._get_files()
-
-        self.keepdim = keepdim
-        self.images = images
-        self.labels = labels
-        self.classes = ["background", "vessel"]
-        self.transforms = transforms
-
-    def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
-            
-        image = np.array(Image.open(self.images[idx]))
-        label = np.array(Image.open(self.labels[idx]), dtype=int)
-
-        if self.keepdim and image.ndim==2:
-            image = np.expand_dims(image, axis=2)
+        target[np.array(mask) == 0] = 0
+        target = Image.fromarray(target)
 
         if self.transforms is not None:
-            image, label = self.transforms(image, label)
+            img, target = self.transforms(img, target)
 
-        return image, label
+        # QUICK HACK FOR PSEUDO_SEG IN VESSELS, BUT IT SPOILS A/V
+        if len(self.label_values)==2: # vessel segmentation case
+            target = target.float()
+            if torch.max(target)>1:
+                target= target.float()/255
 
-    def __len__(self) -> int:
-        return len(self.images)
-    
-    def _get_files(self) -> Tuple[list, list]:
+        return img, target
 
-        root_imgs = self.root/"images"
-        root_labels = self.root/"annotator1/labels"
+    def __len__(self):
+        return len(self.im_list)
 
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        for file in files:
+class TrainTransforms:
 
-            filename, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filename}.png")
+    def __init__(self, tg_size):
 
-        return images, labels
-    
-class CORTEX(Dataset):
-    """Create a dataset object for holding the full CORTEX data. 
+        self.tg_size = tg_size
 
-    Args:
-        root (str | Path): Root directory.
-        keepdim (bool, optional): If True, keeps the channel dimension.
-        normalize (bool, optional): If True, divide the labels by 255 in case
-        label.max()==255.
-        transforms (Callable | None, optional): Transformations to apply to
-        the images and the labels. 
+        scale = tv_transf.RandomAffine(degrees=0, scale=(0.95, 1.20))
+        transl = tv_transf.RandomAffine(degrees=0, translate=(0.05, 0))
+        rotate = tv_transf.RandomRotation(degrees=45)
+        scale_transl_rot = tv_transf.RandomChoice((scale, transl, rotate))
+
+        #brightness, contrast, saturation, hue = 0.25, 0.25, 0.25, 0.01
+        #jitter = tv_transf.ColorJitter(brightness, contrast, saturation, hue)
+
+        hflip = tv_transf.RandomHorizontalFlip()
+        vflip = tv_transf.RandomVerticalFlip()
+
+        to_dtype = tv_transf.ToDtype(
+            {
+                tv_tensors.Image: torch.float32,
+                tv_tensors.Mask: torch.int64
+            },
+            scale=True   # Mask is not scaled
+        )
+
+        unwrap = tv_transf.ToPureTensor()
+
+        self.transform = tv_transf.Compose((
+            scale_transl_rot,
+            #jitter,
+            hflip,
+            vflip,
+            to_dtype,
+            unwrap
+        ))
+
+    def __call__(self, img, target):
+
+        img = torch.from_numpy(img)
+        target = torch.from_numpy(target)
+
+        img = tv_transf_F.resize(img, self.tg_size)
+        # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
+        # object oriented version of resize uses NEAREST, thus we need to use
+        # the functional interface
+        target = tv_transf_F.resize(target, self.tg_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+
+        img = tv_tensors.Image(img)
+        target = tv_tensors.Mask(target)
+
+        img, target = self.transform(img, target)
+        target = target[0]
+
+        return img, target
+
+class ValidTransforms:
+
+    def __init__(self, tg_size):
+        
+        self.tg_size = tg_size
+
+        to_dtype = tv_transf.ToDtype(
+            {
+                tv_tensors.Image: torch.float32,
+                tv_tensors.Mask: torch.int64
+            },
+            scale=True   # Mask is not scaled
+        )
+
+        unwrap = tv_transf.ToPureTensor()
+
+        self.transform = tv_transf.Compose((
+            to_dtype,
+            unwrap
+        ))
+
+    def __call__(self, img, target):
+
+        img = torch.from_numpy(img)
+        target = torch.from_numpy(target)
+        
+        img = tv_transf_F.resize(img, self.tg_size)
+        # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
+        # object oriented version of resize uses NEAREST, thus we need to use
+        # the functional interface
+        target = tv_transf_F.resize(target, self.tg_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+
+        img = tv_tensors.Image(img)
+        target = tv_tensors.Mask(target)
+
+        img, target = self.transform(img, target)
+        target = target[0]
+
+        return img, target
+
+
+def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_size=(512, 512), channels="all"):
+    """Get the DRIVE dataset for training.
+    Parameters
+    ----------
+    dataset_path
+        Path to the dataset root folder
+    split_strategy
+        Strategy to split the dataset. Possible values are:
+        "train_<split>": Use <split> fraction of the train images to validate
+        "use_test": Use the test images of the dataset for validation
+        "file": Use the train.csv and val.csv files to split the dataset
+    resize_size
+        Size to resize the images
+    channels
+        Image channels to use. Options are:
+        "all": Use all channels
+        "green": Use only the green channel
+        "gray": Convert the image to grayscale
     """
 
-    def __init__(
-        self,
-        root: str | Path,
-        keepdim: bool = False,
-        normalize: bool = True,
-        transforms: Callable | None = None,
-    ) -> None:
+    class_weights = (0.13, 0.87)
+    ignore_index = 2
+    collate_fn = None
+
+    dataset_path = Path(dataset_path)
+
+    drive_params = {
+        'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
+    }
+    if "file" in split_strategy:
+        files_train = open(dataset_path/'train.csv').read().splitlines()
+        files_valid = open(dataset_path/'val.csv').read().splitlines()
+        ds_train = DRIVE(dataset_path, files=files_train, **drive_params)
+        ds_valid = DRIVE(dataset_path, files=files_valid, **drive_params)
+
+    elif "train" in split_strategy:
+        ds = DRIVE(dataset_path, **drive_params)
+        split = float(split_strategy.split("_")[1])
+        n = len(ds)
+        n_valid = int(n*split)
+
+        indices = list(range(n))
+        random.shuffle(indices)
         
-        self.root = root
+        class_atts = {
+            'images':ds.images, 'labels':ds.labels, 'masks':ds.masks, 'classes':ds.classes
+        }
+        ds_train = Subset(ds, indices[n_valid:], **class_atts)
+        ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
-        images, labels = self._get_files()
+    elif split_strategy=="use_test":
+        ds_train = DRIVE(dataset_path, split="train", **drive_params)
+        ds_valid = DRIVE(dataset_path, split="test", **drive_params)
 
-        self.keepdim = keepdim
-        self.normalize = normalize
-        self.images = images
-        self.labels = labels
-        self.classes = ["background", "vessel"]
-        self.transforms = transforms
+    ds_train.transforms = TrainTransforms(resize_size)
+    ds_valid.transforms = ValidTransforms(resize_size)
 
-    def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
-            
-        image = np.array(Image.open(self.images[idx]))
-        label = np.array(Image.open(self.labels[idx]), dtype=int)
-
-        # Normalize label to [0,1] if in range [0,255]
-        if self.normalize and label.max()==255:
-            label = label//255
-
-        if self.keepdim and image.ndim==2:
-            image = np.expand_dims(image, axis=2)
-
-        if self.transforms is not None:
-            image, label = self.transforms(image, label)
-
-        return image, label
-
-    def __len__(self) -> int:
-        return len(self.images)
-    
-    def _get_files(self) -> Tuple[list, list]:
-
-        root_imgs = self.root/"images"
-        root_labels = self.root/"labels"
-
-        files = os.listdir(root_imgs)
-        images = []
-        labels = []
-        for file in files:
-
-            filename, _ = file.split('.')
-            images.append(root_imgs/file)
-            labels.append(root_labels/f"{filename}.png")
-
-        return images, labels
+    return ds_train, ds_valid, class_weights, ignore_index, collate_fn

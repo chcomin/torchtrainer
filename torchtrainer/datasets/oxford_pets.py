@@ -6,24 +6,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transf
 from torchvision import tv_tensors
-
-class Subset(Dataset):
-
-    def __init__(self, ds, indices, transform=None):
-        self.ds = ds
-        self.indices = indices
-        self.transform = transform
-
-    def __getitem__(self, idx):
-
-        img, target = self.ds[self.indices[idx]]
-        if self.transform is not None:
-            img, target = self.transform(img, target)
-
-        return img, target
-
-    def __len__(self):
-        return len(self.indices)
+from ..util.train_util import Subset
 
 class OxfordIIITPetSeg(Dataset):
     """Oxford Pets segmentation dataset."""
