@@ -270,6 +270,12 @@ class DefaultTrainer:
             split = float(split_strategy)
             ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
             class_weights, ignore_index, collate_fn = dataset_props
+        elif dataset_class=='drive':
+            from torchtrainer.datasets.vessel import get_dataset_drive_train
+
+            ds_train, ds_valid, *dataset_props = get_dataset_drive_train(
+                dataset_path, split_strategy, resize_size)
+            class_weights, ignore_index, collate_fn = dataset_props
         else:
             # If the dataset is not recognized, the get_dataset method must be implemented
             ds_train, ds_valid, class_weights, ignore_index, collate_fn = self.get_dataset(
@@ -293,6 +299,17 @@ class DefaultTrainer:
         if loss_function=='cross_entropy':
             loss_func = nn.CrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
                                             ignore_index=ignore_index)
+        elif loss_function=='single_channel_cross_entropy':
+            from torchtrainer.losses import SingleChannelCrossEntropyLoss
+
+            loss_func = SingleChannelCrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
+                                            ignore_index=ignore_index)
+        elif loss_function=='bce':
+            if ignore_index==-100:
+                raise ValueError('The BCE loss does not support ignore_index')
+            # We use class_weights[1]/class_weights[0] for class 1 because the weight of class 0
+            # in BCE is always 1
+            loss_func = nn.BCEWithLogitsLoss(pos_weight=class_weights[1]/class_weights[0])
         else:
             raise ValueError(f'Loss function {loss_function} not recognized')
 
@@ -510,7 +527,7 @@ class DefaultTrainer:
                     else:
                         epochs_without_improvement += 1
                         # No improvement for `patience`` validations
-                        if epochs_without_improvement>args.patience:
+                        if args.patience is not None and epochs_without_improvement>args.patience:
                             break
 
         except KeyboardInterrupt:
@@ -613,7 +630,8 @@ class DefaultTrainer:
         group = parser.add_argument_group('Training parameters')
         group.add_argument('--num-epochs', type=int, default=2, metavar='N', help='Number of training epochs')
         group.add_argument('--validation-metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
-        group.add_argument('--patience', type=int, default=50, metavar='N', help='Finish training if the validation metric does not improve for N validation steps')
+        group.add_argument('--patience', type=int, default=None, metavar='N', help='Finish training if the validation metric does not improve for N validation steps'
+                           'If not provided, this functionality is disabled.')
         group.add_argument('--maximize-validation-metric', action='store_true', 
                            help='If set, early stopping will maximize the validation metric instead of minimizing')
         group.add_argument('--lr', type=float, default=0.01, metavar='V', help='Initial learning rate')

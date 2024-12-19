@@ -2,6 +2,55 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+def single_channel_cross_entropy(
+        input, 
+        target, 
+        weight=None, 
+        ignore_index=-100, 
+        reduction='mean', 
+        label_smoothing=0.0
+    ):
+    """Cross entropy loss for single channel input. This function is a replacement for the 
+    binary_cross_entropy_with_logits function in PyTorch, that is, it can be used for models 
+    that output single channel scores. But contrary to the PyTorch function, this function
+    accepts class weights in the same format as in the cross_entropy function of Pytorch. It
+    also accepts an ignore_index and label smoothing.
+
+    The parameters are exactly the same as in the cross_entropy function of PyTorch, except
+    that the input must be a single channel tensor. The target must be a tensor with the same
+    shape as the input, with values 0 or 1.
+    """
+
+    input_c1 = torch.zeros_like(input)
+    # for BCE(x), cross_entropy((-x, 0)) must provide the same result
+    input = torch.cat((-input, input_c1), dim=1)
+
+    return F.cross_entropy(input, target, weight=weight, ignore_index=ignore_index, reduction=reduction, label_smoothing=label_smoothing)
+
+class SingleChannelCrossEntropyLoss(torch.nn.CrossEntropyLoss):
+
+    def __init__(
+        self,
+        weight: torch.Tensor | None = None,
+        ignore_index: int = -100,
+        reduction: str = "mean",
+        label_smoothing: float = 0.0,
+    ) -> None:
+        super().__init__(weight, reduction=reduction)
+        self.ignore_index = ignore_index
+        self.label_smoothing = label_smoothing
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+
+        return single_channel_cross_entropy(
+            input,
+            target,
+            weight=self.weight,
+            ignore_index=self.ignore_index,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
     '''Weighted cross entropy. The probabilities for each pixel are weighted according to
     `weight`.

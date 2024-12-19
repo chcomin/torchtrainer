@@ -3,77 +3,12 @@ images from the respective datasets. """
 
 from pathlib import Path
 import random
-import numpy as np
-from PIL import Image
-from torch.utils.data import Dataset
-from ..datasets.vessel_base import DRIVE
-from ..util.train_util import Subset
-
-
-import os.path as osp
-import pandas as pd
-from skimage import measure
 import torch
 from torchvision.transforms import v2 as tv_transf
 from torchvision.transforms.v2 import functional as tv_transf_F
 from torchvision import tv_tensors
-
-class TrainDataset(Dataset):
-    def __init__(self, csv_path, transforms=None, channels='all'):
-        df = pd.read_csv(csv_path)
-        self.root = osp.dirname(csv_path)
-        self.im_list = df.im_paths
-        self.gt_list = df.gt_paths
-        self.mask_list = df.mask_paths
-        self.transforms = transforms
-        self.channels = channels
-        self.label_values = (0, 255)  # for use in label_encoding
-
-    def label_encoding(self, gdt):
-        gdt_gray = np.array(gdt.convert('L'))
-        classes = np.arange(len(self.label_values))
-        for i in classes:
-            gdt_gray[gdt_gray == self.label_values[i]] = classes[i]
-        return Image.fromarray(gdt_gray)
-
-    def crop_to_fov(self, img, target, mask):
-        minr, minc, maxr, maxc = measure.regionprops(np.array(mask))[0].bbox
-        im_crop = Image.fromarray(np.array(img)[minr:maxr, minc:maxc])
-        tg_crop = Image.fromarray(np.array(target)[minr:maxr, minc:maxc])
-        mask_crop = Image.fromarray(np.array(mask)[minr:maxr, minc:maxc])
-        return im_crop, tg_crop, mask_crop
-
-    def __getitem__(self, index):
-        # load image and labels
-        img = Image.open(osp.join(self.root,self.im_list[index]))
-        target = Image.open(osp.join(self.root,self.gt_list[index]))
-        mask = Image.open(osp.join(self.root,self.mask_list[index])).convert('L')
-
-        if self.channels=='gray':
-            img = img.convert('L')
-        elif self.channels=='green':
-            img = Image.fromarray(np.array(img)[:,:,1])
-
-        img, target, mask = self.crop_to_fov(img, target, mask)
-
-        target = np.array(self.label_encoding(target))
-
-        target[np.array(mask) == 0] = 0
-        target = Image.fromarray(target)
-
-        if self.transforms is not None:
-            img, target = self.transforms(img, target)
-
-        # QUICK HACK FOR PSEUDO_SEG IN VESSELS, BUT IT SPOILS A/V
-        if len(self.label_values)==2: # vessel segmentation case
-            target = target.float()
-            if torch.max(target)>1:
-                target= target.float()/255
-
-        return img, target
-
-    def __len__(self):
-        return len(self.im_list)
+from ..datasets.vessel_base import DRIVE
+from ..util.train_util import Subset
 
 class TrainTransforms:
 
@@ -85,36 +20,22 @@ class TrainTransforms:
         transl = tv_transf.RandomAffine(degrees=0, translate=(0.05, 0))
         rotate = tv_transf.RandomRotation(degrees=45)
         scale_transl_rot = tv_transf.RandomChoice((scale, transl, rotate))
-
         #brightness, contrast, saturation, hue = 0.25, 0.25, 0.25, 0.01
         #jitter = tv_transf.ColorJitter(brightness, contrast, saturation, hue)
-
         hflip = tv_transf.RandomHorizontalFlip()
         vflip = tv_transf.RandomVerticalFlip()
-
-        to_dtype = tv_transf.ToDtype(
-            {
-                tv_tensors.Image: torch.float32,
-                tv_tensors.Mask: torch.int64
-            },
-            scale=True   # Mask is not scaled
-        )
-
-        unwrap = tv_transf.ToPureTensor()
 
         self.transform = tv_transf.Compose((
             scale_transl_rot,
             #jitter,
             hflip,
             vflip,
-            to_dtype,
-            unwrap
         ))
 
     def __call__(self, img, target):
 
-        img = torch.from_numpy(img)
-        target = torch.from_numpy(target)
+        img = torch.from_numpy(img).permute(2, 0, 1).to(dtype=torch.uint8)
+        target = torch.from_numpy(target).unsqueeze(0).to(dtype=torch.uint8)
 
         img = tv_transf_F.resize(img, self.tg_size)
         # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
@@ -126,7 +47,9 @@ class TrainTransforms:
         target = tv_tensors.Mask(target)
 
         img, target = self.transform(img, target)
-        target = target[0]
+
+        img = img.data.float()/255
+        target = target.data.to(dtype=torch.int64)[0]
 
         return img, target
 
@@ -153,8 +76,8 @@ class ValidTransforms:
 
     def __call__(self, img, target):
 
-        img = torch.from_numpy(img)
-        target = torch.from_numpy(target)
+        img = torch.from_numpy(img).permute(2, 0, 1)
+        target = torch.from_numpy(target).unsqueeze(0)
         
         img = tv_transf_F.resize(img, self.tg_size)
         # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
@@ -180,7 +103,7 @@ def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_siz
     split_strategy
         Strategy to split the dataset. Possible values are:
         "train_<split>": Use <split> fraction of the train images to validate
-        "use_test": Use the test images of the dataset for validation
+        "valid_test": Use the test images of the dataset for validation
         "file": Use the train.csv and val.csv files to split the dataset
     resize_size
         Size to resize the images
@@ -221,7 +144,7 @@ def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_siz
         ds_train = Subset(ds, indices[n_valid:], **class_atts)
         ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
-    elif split_strategy=="use_test":
+    elif split_strategy=="valid_test":
         ds_train = DRIVE(dataset_path, split="train", **drive_params)
         ds_valid = DRIVE(dataset_path, split="test", **drive_params)
 
