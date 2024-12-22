@@ -115,7 +115,7 @@ def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_siz
     """
 
     class_weights = (0.13, 0.87)
-    ignore_index = 2
+    ignore_index = None #2
     collate_fn = None
 
     dataset_path = Path(dataset_path)
