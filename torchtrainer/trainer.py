@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
 from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_imgs
 from torchtrainer.util.train_util import ParseKwargs, ParseText
-from torchtrainer.metrics import ConfusionMatrixMetrics
+from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics, ROCAUCScore
 
 # TODO: wandb 
 # TODO: profiling
@@ -274,7 +274,7 @@ class DefaultTrainer:
             from torchtrainer.datasets.vessel import get_dataset_drive_train
 
             ds_train, ds_valid, *dataset_props = get_dataset_drive_train(
-                dataset_path, split_strategy, resize_size)
+                dataset_path, split_strategy, resize_size, **dataset_params)
             class_weights, ignore_index, collate_fn = dataset_props
         else:
             # If the dataset is not recognized, the get_dataset method must be implemented
@@ -300,7 +300,7 @@ class DefaultTrainer:
             loss_func = nn.CrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
                                             ignore_index=ignore_index)
         elif loss_function=='single_channel_cross_entropy':
-            from torchtrainer.losses import SingleChannelCrossEntropyLoss
+            from torchtrainer.metrics.losses import SingleChannelCrossEntropyLoss
 
             loss_func = SingleChannelCrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
                                             ignore_index=ignore_index)
@@ -314,17 +314,19 @@ class DefaultTrainer:
             raise ValueError(f'Loss function {loss_function} not recognized')
 
         conf_metrics = ConfusionMatrixMetrics(ignore_index)
+        roc_auc_score = ROCAUCScore(ignore_index)
         # conf_metrics() returns 5 values. To set names to these
         # values, we need to wrap it in a WrapDict object.
         perf_funcs = [
-            WrapDict(conf_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
+            WrapDict(conf_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice']),
+            WrapDict(roc_auc_score, ['AUC'])
         ]
 
         logger = Logger()
         # How to group the data when plotting, each group becomes an individual plot
         logger_plotter = LoggerPlotter([
             {'names': ['Train loss', 'Validation loss'], 'y_max': 1.},
-            {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'], 'y_max': 1.}
+            {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice', 'AUC'], 'y_max': 1.}
         ])
 
         num_classes = len(class_weights)
@@ -365,7 +367,7 @@ class DefaultTrainer:
 
         seed_all(args.seed)
 
-        if model_name=='encoder_decoder':
+        if model_name=='simple_encoder_decoder':
             from torchtrainer.models.simple_encoder_decoder import get_model
 
             model = get_model(**model_params, num_classes=num_classes, 
@@ -561,7 +563,7 @@ class DefaultTrainer:
         if param_dict is None:
             sys_argv = None
         else:
-            positional_args = ['dataset-path', 'dataset-class', 'model-name']
+            positional_args = ['dataset_path', 'dataset_class', 'model_name']
             sys_argv = dict_to_argv(param_dict, positional_args)
 
         parser, config_parser = self.get_parser()
@@ -592,13 +594,13 @@ class DefaultTrainer:
 
         # Logging parameters
         group = parser.add_argument_group('Logging parameters')
-        group.add_argument('-p', '--experiments-path', default='experiments', metavar='PATH', help='Path to save experiments data')
-        group.add_argument('-e', '--experiment-name', default='no_name_experiment', metavar='NAME', help='Name of the experiment')
-        group.add_argument('-n', '--run-name', default='no_name_run', metavar='NAME', help='Name of the run for a given experiment')
-        group.add_argument('--validate-every', type=int, default=1, metavar='N', help='Run a validation step every N epochs')
-        group.add_argument('--save-val-imgs', action='store_true', help='Save some validation images when validating')
-        group.add_argument('--val-img-indices', nargs='*', type=int, default=(0,), metavar='N N N', help='Indices of the validation images to save')
-        group.add_argument('--copy-model-every', type=int, default=0, metavar='N', 
+        group.add_argument('-p', '--experiments_path', default='experiments', metavar='PATH', help='Path to save experiments data')
+        group.add_argument('-e', '--experiment_name', default='no_name_experiment', metavar='NAME', help='Name of the experiment')
+        group.add_argument('-n', '--run_name', default='no_name_run', metavar='NAME', help='Name of the run for a given experiment')
+        group.add_argument('--validate_every', type=int, default=1, metavar='N', help='Run a validation step every N epochs')
+        group.add_argument('--save_val_imgs', action='store_true', help='Save some validation images when validating')
+        group.add_argument('--val_img_indices', nargs='*', type=int, default=(0,), metavar='N N N', help='Indices of the validation images to save')
+        group.add_argument('--copy_model_every', type=int, default=0, metavar='N', 
                            help='Save a copy of the model every N epochs. If 0 (default) no copies are saved')
         parser.add_argument('--meta', default='', nargs='*', action=ParseText, help='Additional metadata to save in the config.json file '
                             'describing the experiment. Whitespaces do not need to be escaped.')
@@ -607,38 +609,38 @@ class DefaultTrainer:
         group = parser.add_argument_group('Dataset parameters')
         group.add_argument('dataset_path', help='Path to the dataset root directory')        
         group.add_argument('dataset_class', help='Name of the dataset class to use')
-        group.add_argument('--split-strategy', default='0.2',  metavar='STRING',
+        group.add_argument('--split_strategy', default='0.2',  metavar='STRING',
                         help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
-        group.add_argument('--augmentation-strategy', default=None, metavar='STRING', 
+        group.add_argument('--augmentation_strategy', default=None, metavar='STRING', 
                            help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
-        group.add_argument('--resize-size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), help='Size to resize the images. E.g. --resize-size 128 128')
-        group.add_argument('--dataset-params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                        help='Additional parameters to pass to the dataset creation function. E.g. --dataset-params par1=v1 par2=v2 par3=v3. '
+        group.add_argument('--resize_size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), help='Size to resize the images. E.g. --resize_size 128 128')
+        group.add_argument('--dataset_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the dataset creation function. E.g. --dataset_params par1=v1 par2=v2 par3=v3. '
                         'The additional parameters are evaluated as Python code and cannot contain spaces.')
-        group.add_argument('--loss-function', default='cross_entropy', metavar='LOSS', help='Loss function to use during training')
-        group.add_argument('--ignore-class-weights', action='store_true', help='If provided, ignore class weights for the loss function')
+        group.add_argument('--loss_function', default='cross_entropy', metavar='LOSS', help='Loss function to use during training')
+        group.add_argument('--ignore_class_weights', action='store_true', help='If provided, ignore class weights for the loss function')
 
         # Model parameters
         group = parser.add_argument_group('Model parameters')
         group.add_argument('model_name', help='Name of the model to train')
-        group.add_argument('--weights-strategy', default=None, metavar='STRING', 
+        group.add_argument('--weights_strategy', default=None, metavar='STRING', 
             help='This argument is sent to the model creation function and can be used to define how to load the weights')
-        group.add_argument('--model-params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                        help='Additional parameters to pass to the model creation function. E.g. --model-params par1=v1 par2=v2 par3=v3')
+        group.add_argument('--model_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the model creation function. E.g. --model_params par1=v1 par2=v2 par3=v3')
 
         # Training parameters
         group = parser.add_argument_group('Training parameters')
-        group.add_argument('--num-epochs', type=int, default=2, metavar='N', help='Number of training epochs')
-        group.add_argument('--validation-metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
+        group.add_argument('--num_epochs', type=int, default=2, metavar='N', help='Number of training epochs')
+        group.add_argument('--validation_metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
         group.add_argument('--patience', type=int, default=None, metavar='N', help='Finish training if the validation metric does not improve for N validation steps'
                            'If not provided, this functionality is disabled.')
-        group.add_argument('--maximize-validation-metric', action='store_true', 
+        group.add_argument('--maximize_validation_metric', action='store_true', 
                            help='If set, early stopping will maximize the validation metric instead of minimizing')
         group.add_argument('--lr', type=float, default=0.01, metavar='V', help='Initial learning rate')
-        group.add_argument('--lr-decay', type=float, default=1., metavar='V', help='Learning rate decay')
-        group.add_argument('--bs-train', type=int, default=32, metavar='N', help='Batch size used durig training')
-        group.add_argument('--bs-valid', type=int, default=8, metavar='N', help='Batch size used durig validation')
-        group.add_argument('--weight-decay', type=float, default=1e-4, metavar='V', help='Weight decay for the optimizer')
+        group.add_argument('--lr_decay', type=float, default=1., metavar='V', help='Learning rate decay')
+        group.add_argument('--bs_train', type=int, default=32, metavar='N', help='Batch size used durig training')
+        group.add_argument('--bs_valid', type=int, default=8, metavar='N', help='Batch size used durig validation')
+        group.add_argument('--weight_decay', type=float, default=1e-4, metavar='V', help='Weight decay for the optimizer')
         group.add_argument('--optimizer', default='sgd', help='Optimizer to use')
         group.add_argument('--momentum', type=float, default=0.9, metavar='V', help='Momentum/beta1 of the optimizer')
         group.add_argument('--seed', type=int, default=0, metavar='N', help='Seed for the random number generator')
@@ -646,8 +648,8 @@ class DefaultTrainer:
         # Device and efficiency parameters
         group = parser.add_argument_group('Device and efficiency parameters')
         group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
-        group.add_argument('--num-workers', type=int, default=5, metavar='N', help='Number of workers for the DataLoader')
-        group.add_argument('--use-amp', action='store_true', help='If automatic mixed precision should be used')
+        group.add_argument('--num_workers', type=int, default=5, metavar='N', help='Number of workers for the DataLoader')
+        group.add_argument('--use_amp', action='store_true', help='If automatic mixed precision should be used')
         group.add_argument('--deterministic', action='store_true', help='If deterministic algorithms should be used')
         group.add_argument('--benchmark', action='store_true', help='If cuda benchmark should be used')
 
