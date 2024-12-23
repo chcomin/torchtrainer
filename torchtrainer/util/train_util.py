@@ -198,8 +198,8 @@ class Subset(Dataset):
 class WrapDict:
     """
     Wrapper class to name the return values of a function. Given a function
-    that returns a tuple, WrapDict creates a new function that returns a
-    dictionary with the names of the tuple elements as keys.
+    that returns a value or a tuple, WrapDict creates a new function that returns 
+    a dictionary with the names of the tuple elements as keys.
     Parameters
     ----------
     names : Names of the values returned by the function
@@ -212,6 +212,12 @@ class WrapDict:
 
     def __call__(self, *args):
         values = self.func(*args)
+        
+        try:
+            _ = iter(values)
+        except TypeError:
+            values = (values,)
+
         return {name: value for name, value in zip(self.names, values)}
 
 class SingleMetric:

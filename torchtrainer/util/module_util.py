@@ -1,4 +1,4 @@
-'''Utility functions and classes for working with Pytorch modules'''
+"""Utility functions and classes for working with Pytorch modules"""
 
 from collections import OrderedDict
 import copy
@@ -8,13 +8,13 @@ import torch
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
 class ActivationSampler(nn.Module):
-    '''Generates a hook for sampling a layer activation. Can be used as
+    """Generates a hook for sampling a layer activation. Can be used as
 
     sampler = ActivationSampler(layer_in_model)
     output = model(input)
     layer_activation = sampler()
 
-    '''
+    """
 
     def __init__(self, model):
         super().__init__()
@@ -36,7 +36,7 @@ class ActivationSampler(nn.Module):
     def __del__(self): self.hook_handler.remove()
 
 class Lambda(nn.Module):
-    '''Transforms function into a module'''
+    """Transform function into a Pytorch module"""
 
     def __init__(self, func):
         super().__init__()
@@ -70,7 +70,7 @@ class Hook:
     def __del__(self): self.remove()
 
 class ReceptiveField:
-    '''Calculate the receptive field of a pixel in the activation map of a neural network layer. Example
+    """Calculate the receptive field of a pixel in the activation map of a neural network layer. Example
     usage:
 
     receptive_field = ReceptiveField(model)
@@ -89,7 +89,7 @@ class ReceptiveField:
     -------
     rf: torch.tensor
         An image containing the receptive field.
-    '''
+    """
 
     conv_layers = (nn.Conv1d, nn.Conv2d, nn.Conv3d)
     conv_transp_layers = (nn.ConvTranspose1d, nn.ConvTranspose2d, nn.ConvTranspose3d)
@@ -329,8 +329,8 @@ class FeatureExtractor:
 
 
 def split_modules(model, modules_to_split):
-    '''Split `model` layers into different groups. Useful for freezing part of the model
-    or using different learning rates.'''
+    """Split `model` layers into different groups. Useful for freezing part of the model
+    or using different learning rates."""
 
     module_groups = [[]]
     for module in model.modules():
@@ -340,8 +340,8 @@ def split_modules(model, modules_to_split):
     return module_groups
 
 def define_opt_params(module_groups, lr=None, wd=None, debug=False):
-    '''Define distinct learning rate and weight decay for parameters belonging
-    to groupd modules in `module_groups`. '''
+    """Define distinct learning rate and weight decay for parameters belonging
+    to groupd modules in `module_groups`. """
 
     num_groups = len(module_groups)
     if isinstance(lr, int): 
@@ -370,8 +370,8 @@ def define_opt_params(module_groups, lr=None, wd=None, debug=False):
     return opt_params
 
 def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
-    '''Set requires_grad to `req_grad` for all parameters in `module_groups`.
-    If `keep_bn` is True, batchnorm layers are not changed.'''
+    """Set requires_grad to `req_grad` for all parameters in `module_groups`.
+    If `keep_bn` is True, batchnorm layers are not changed."""
 
     for idx, group in enumerate(module_groups):
         for module in group:
@@ -380,8 +380,8 @@ def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
                     p.requires_grad=req_grad
 
 def freeze_to(module_groups, group_idx=-1, keep_bn=False):
-    '''Freeze model groups up to the group with index `group_idx`. If `group_idx` is None,
-    freezes the entire model. If `keep_bn` is True, batchnorm layers are not changed.'''
+    """Freeze model groups up to the group with index `group_idx`. If `group_idx` is None,
+    freezes the entire model. If `keep_bn` is True, batchnorm layers are not changed."""
 
     slice_freeze = slice(0, group_idx)
     if group_idx is not None:
@@ -393,7 +393,7 @@ def freeze_to(module_groups, group_idx=-1, keep_bn=False):
         groups_requires_grad(module_groups[slice_unfreeze], True)
 
 def unfreeze(module_groups):
-    '''Unfreezes the entire model.'''
+    """Unfreezes the entire model."""
 
     groups_requires_grad(module_groups, True)
 
