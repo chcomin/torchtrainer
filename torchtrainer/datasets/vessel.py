@@ -94,7 +94,13 @@ class ValidTransforms:
         return img, target
 
 
-def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_size=(512, 512), channels="all"):
+def get_dataset_drive_train(
+        dataset_path, 
+        split_strategy="train_0.2", 
+        resize_size=(512, 512), 
+        channels="all",
+        use_ignore_index=True
+        ):
     """Get the DRIVE dataset for training.
     Parameters
     ----------
@@ -112,10 +118,12 @@ def get_dataset_drive_train(dataset_path, split_strategy="train_0.2", resize_siz
         "all": Use all channels
         "green": Use only the green channel
         "gray": Convert the image to grayscale
+    use_ignore_index
+        If True, the ignore index is set to 2. Otherwise, it is set to None
     """
 
     class_weights = (0.13, 0.87)
-    ignore_index = None #2
+    ignore_index = 2 if use_ignore_index else None
     collate_fn = None
 
     dataset_path = Path(dataset_path)
