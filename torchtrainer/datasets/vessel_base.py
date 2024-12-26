@@ -15,27 +15,6 @@ class RetinaDataset(Dataset):
 
     Note: __getitem__ returns a numpy array and not a pillow image because pillow
     does not support a negative ignore index (e.g. -100).
-
-    Args:
-        root (str | Path): Root directory.
-        split (str): The split to use. Possible values are "train", "test" and
-            "all"
-        channels (str, optional): Image channels to use. Options are:
-            "all": Use all channels
-            "green": Use only the green channel
-            "gray": Convert the image to grayscale
-        keepdim (bool, optional): If True, keeps the channel dimension in case
-            `channels` is "green" or "gray"
-        return_mask (bool, optional): If True, also returns the retina mask
-        ignore_index (int | None, optional): Index to put at the labels for pixels
-            outside the mask (the retina). If None, do nothing.
-        normalize (bool, optional): If True, divide the labels by 255 in case
-            label.max()==255.
-        files: (list, optional): List of files to keep from the split. If None, 
-            use all files.
-        transforms (Callable | None, optional): Transformations to apply to
-            the images and the labels. If `return_mask` is True, the transform
-            needs to also accept the mask image as input.
     """
 
     _HAS_TEST = None
@@ -51,7 +30,32 @@ class RetinaDataset(Dataset):
         normalize: bool = True,
         files: list = None,
         transforms: Callable | None = None,
-    ) -> None:
+    ):
+        """
+        root
+            Root directory.
+        split
+            The split to use. Possible values are "train", "test" and "all"
+        channels
+            Image channels to use. Options are:
+            "all": Use all channels
+            "green": Use only the green channel
+            "gray": Convert the image to grayscale
+        keepdim
+            If True, keeps the channel dimension in case `channels` is "green" or "gray"
+        return_mask
+            If True, also returns the retina mask
+        ignore_index
+            Index to put at the labels for pixels outside the mask (the retina). 
+            If None, do nothing.
+        normalize
+            If True, divide the labels by 255 in case label.max()==255.
+        files
+            List of files to keep from the split. If None, use all files.
+        transforms
+            Transformations to apply to the images and the labels. If `return_mask` 
+            is True, the transform needs to also accept the mask image as input.
+        """
         
         self.root = Path(root)
 
@@ -325,28 +329,43 @@ class FIVES(RetinaDataset):
     
 class VessMAP(Dataset):
     """Create a dataset object for holding the VessMAP data. 
-
-    Args:
-        root (str | Path): Root directory.
-        keepdim (bool, optional): If True, keeps the channel dimension.
-        transforms (Callable | None, optional): Transformations to apply to
-        the images and the labels. 
     """
-
     def __init__(
         self,
         root: str | Path,
         keepdim: bool = False,
+        normalize: bool = True,
+        files: list = None,
         transforms: Callable | None = None,
-    ) -> None:
+    ):
+        """
+        root
+            Root directory.
+        keepdim
+            If True, keeps the channel dimension of the image
+        normalize
+            If True, divide the labels by 255 in case label.max()==255.
+        files
+            List of dataset files to use. If None, use all files.
+        transforms
+            Transformations to apply to the images and the labels.
+        """
         
-        self.root = root
+        self.root = Path(root)
 
         images, labels = self._get_files()
 
+        # Filter files if needed
+        if files is not None:
+            indices = search_files(files, images)
+            images = [images[idx] for idx in indices]
+            labels = [labels[idx] for idx in indices]
+
         self.keepdim = keepdim
-        self.images = images
-        self.labels = labels
+        self.normalize = normalize
+
+        self.images = sorted(images)
+        self.labels = sorted(labels)
         self.classes = ["background", "vessel"]
         self.transforms = transforms
 
@@ -357,6 +376,10 @@ class VessMAP(Dataset):
 
         if self.keepdim and image.ndim==2:
             image = np.expand_dims(image, axis=2)
+
+        # Normalize label to [0,1] if in range [0,255]
+        if self.normalize and label.max()==255:
+            label = label//255
 
         if self.transforms is not None:
             image, label = self.transforms(image, label)
@@ -369,7 +392,7 @@ class VessMAP(Dataset):
     def _get_files(self) -> Tuple[list, list]:
 
         root_imgs = self.root/"images"
-        root_labels = self.root/"annotator1/labels"
+        root_labels = self.root/"annotator1"/"labels"
 
         files = os.listdir(root_imgs)
         images = []
@@ -383,33 +406,43 @@ class VessMAP(Dataset):
         return images, labels
     
 class CORTEX(Dataset):
-    """Create a dataset object for holding the full CORTEX data. 
-
-    Args:
-        root (str | Path): Root directory.
-        keepdim (bool, optional): If True, keeps the channel dimension.
-        normalize (bool, optional): If True, divide the labels by 255 in case
-        label.max()==255.
-        transforms (Callable | None, optional): Transformations to apply to
-        the images and the labels. 
-    """
-
+    """Create a dataset object for holding the CORTEX data. """
     def __init__(
         self,
         root: str | Path,
         keepdim: bool = False,
         normalize: bool = True,
+        files: list = None,
         transforms: Callable | None = None,
-    ) -> None:
+    ):
+        """
+        root
+            Root directory.
+        keepdim
+            If True, keeps the channel dimension of the image
+        normalize
+            If True, divide the labels by 255 in case label.max()==255.
+        files
+            List of dataset files to use. If None, use all files.
+        transforms
+            Transformations to apply to the images and the labels.
+        """
         
-        self.root = root
+        self.root = Path(root)
 
         images, labels = self._get_files()
 
+        # Filter files if needed
+        if files is not None:
+            indices = search_files(files, images)
+            images = [images[idx] for idx in indices]
+            labels = [labels[idx] for idx in indices]
+
         self.keepdim = keepdim
         self.normalize = normalize
-        self.images = images
-        self.labels = labels
+
+        self.images = sorted(images)
+        self.labels = sorted(labels)
         self.classes = ["background", "vessel"]
         self.transforms = transforms
 
@@ -418,12 +451,12 @@ class CORTEX(Dataset):
         image = np.array(Image.open(self.images[idx]))
         label = np.array(Image.open(self.labels[idx]), dtype=int)
 
+        if self.keepdim and image.ndim==2:
+            image = np.expand_dims(image, axis=2)
+
         # Normalize label to [0,1] if in range [0,255]
         if self.normalize and label.max()==255:
             label = label//255
-
-        if self.keepdim and image.ndim==2:
-            image = np.expand_dims(image, axis=2)
 
         if self.transforms is not None:
             image, label = self.transforms(image, label)

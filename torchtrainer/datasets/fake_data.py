@@ -11,12 +11,12 @@ class FakeClassificationData(Dataset):
         half = img_size//2
         quarter = img_size//4
         
-        img_square = torch.zeros((img_size, img_size))
+        img_square = torch.zeros((img_size, img_size), dtype=torch.uint8)
         inds = draw.rectangle((quarter, quarter), extent=(half, half))
         img_square[inds] = 1
         img_square = img_square.tile((3,1,1))
 
-        img_disk = torch.zeros((img_size, img_size))
+        img_disk = torch.zeros((img_size, img_size), dtype=torch.uint8)
         inds = draw.disk((half, half), quarter)
         img_disk[inds] = 1
         img_disk = img_disk.tile((3,1,1))
@@ -36,4 +36,11 @@ class FakeSegmentationData(FakeClassificationData):
 
     def __getitem__(self, idx):
         img, _ = super().__getitem__(idx)
-        return img, img
+        return img, img[0].to(torch.int64)
+    
+def get_dataset(img_size=224):
+
+    ds_train = FakeSegmentationData(img_size, n_samples=80)
+    ds_valid = FakeSegmentationData(img_size, n_samples=20)
+
+    return ds_train, ds_valid, (0.5, 0.5), None, None

@@ -7,7 +7,7 @@ import torch
 from torchvision.transforms import v2 as tv_transf
 from torchvision.transforms.v2 import functional as tv_transf_F
 from torchvision import tv_tensors
-from ..datasets.vessel_base import DRIVE
+from ..datasets.vessel_base import DRIVE, VessMAP
 from ..util.train_util import Subset
 
 class TrainTransforms:
@@ -126,9 +126,12 @@ def get_dataset_drive_train(
         random.shuffle(indices)
         
         class_atts = {
-            'images':ds.images, 'labels':ds.labels, 'masks':ds.masks, 'classes':ds.classes
+            'images':ds.images[n_valid:], 'labels':ds.labels[n_valid:], 'classes':ds.classes
         }
         ds_train = Subset(ds, indices[n_valid:], **class_atts)
+        class_atts = {
+            'images':ds.images[:n_valid], 'labels':ds.labels[:n_valid], 'classes':ds.classes
+        }
         ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
     elif split_strategy=="valid_test":
@@ -189,3 +192,56 @@ def get_dataset_drive_test(
 
 
     return ds_train, ds_test, class_weights, ignore_index
+
+def get_dataset_vessmap_train(
+        dataset_path, 
+        split_strategy="rand_0.2", 
+        resize_size=(256, 256), 
+        ):
+    """Get the VessMAP dataset for training.
+    Parameters
+    ----------
+    dataset_path
+        Path to the dataset root folder
+    split_strategy
+        Strategy to split the dataset. Possible values are:
+        "rand_<split>": Use <split> fraction of the images to validate
+        "file": Use the train.csv and val.csv files to split the dataset
+    resize_size
+        Size to resize the images
+    """
+
+    class_weights = (0.26, 0.74)
+    ignore_index = None
+    collate_fn = None
+
+    dataset_path = Path(dataset_path)
+
+    if "rand" in split_strategy:
+        ds = VessMAP(dataset_path, keepdim=True)
+        split = float(split_strategy.split("_")[1])
+        n = len(ds)
+        n_valid = int(n*split)
+
+        indices = list(range(n))
+        random.shuffle(indices)
+        
+        class_atts = {
+            'images':ds.images[n_valid:], 'labels':ds.labels[n_valid:], 'classes':ds.classes
+        }
+        ds_train = Subset(ds, indices[n_valid:], **class_atts)
+        class_atts = {
+            'images':ds.images[:n_valid], 'labels':ds.labels[:n_valid], 'classes':ds.classes
+        }
+        ds_valid = Subset(ds, indices[:n_valid], **class_atts)
+
+    elif split_strategy=="file":
+        files_train = open(dataset_path/'train.csv').read().splitlines()
+        files_valid = open(dataset_path/'val.csv').read().splitlines()
+        ds_train = VessMAP(dataset_path, keepdim=True, files=files_train)
+        ds_valid = DRIVE(dataset_path, keepdim=True, files=files_valid)
+
+    ds_train.transforms = TrainTransforms(resize_size)
+    ds_valid.transforms = ValidTransforms(resize_size)
+
+    return ds_train, ds_valid, class_weights, ignore_index, collate_fn
