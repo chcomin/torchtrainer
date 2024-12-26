@@ -279,7 +279,7 @@ class ParseText(argparse.Action):
         text = ' '.join(values)
         setattr(namespace, self.dest, text)
 
-def dict_to_argv(param_dict: dict, positional_args: list | None) -> list:
+def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
     """Convert a dictionary to a list mimicking an argv list received by a
     python program from the command line.
 

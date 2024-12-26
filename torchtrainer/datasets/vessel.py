@@ -12,9 +12,10 @@ from ..util.train_util import Subset
 
 class TrainTransforms:
 
-    def __init__(self, tg_size):
+    def __init__(self, resize_size, resize_target = True):
 
-        self.tg_size = tg_size
+        self.resize_size = resize_size
+        self.resize_target = resize_target
 
         scale = tv_transf.RandomAffine(degrees=0, scale=(0.95, 1.20))
         transl = tv_transf.RandomAffine(degrees=0, translate=(0.05, 0))
@@ -37,11 +38,9 @@ class TrainTransforms:
         img = torch.from_numpy(img).permute(2, 0, 1).to(dtype=torch.uint8)
         target = torch.from_numpy(target).unsqueeze(0).to(dtype=torch.uint8)
 
-        img = tv_transf_F.resize(img, self.tg_size)
-        # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
-        # object oriented version of resize uses NEAREST, thus we need to use
-        # the functional interface
-        target = tv_transf_F.resize(target, self.tg_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+        img = tv_transf_F.resize(img, self.resize_size)
+        if self.resize_target:
+            target = tv_transf_F.resize(target, self.resize_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
 
         img = tv_tensors.Image(img)
         target = tv_tensors.Mask(target)
@@ -55,44 +54,24 @@ class TrainTransforms:
 
 class ValidTransforms:
 
-    def __init__(self, tg_size):
-        
-        self.tg_size = tg_size
-
-        to_dtype = tv_transf.ToDtype(
-            {
-                tv_tensors.Image: torch.float32,
-                tv_tensors.Mask: torch.int64
-            },
-            scale=True   # Mask is not scaled
-        )
-
-        unwrap = tv_transf.ToPureTensor()
-
-        self.transform = tv_transf.Compose((
-            to_dtype,
-            unwrap
-        ))
+    def __init__(self, resize_size = None, resize_target = True):
+        self.resize_size = resize_size
+        self.resize_target = resize_target
 
     def __call__(self, img, target):
 
-        img = torch.from_numpy(img).permute(2, 0, 1)
-        target = torch.from_numpy(target).unsqueeze(0)
+        img = torch.from_numpy(img).permute(2, 0, 1).to(dtype=torch.uint8)
+        target = torch.from_numpy(target).unsqueeze(0).to(dtype=torch.uint8)
         
-        img = tv_transf_F.resize(img, self.tg_size)
-        # NEAREST_EXACT has a 0.01 better Dice score than NEAREST. The
-        # object oriented version of resize uses NEAREST, thus we need to use
-        # the functional interface
-        target = tv_transf_F.resize(target, self.tg_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+        if self.resize_size is not None:
+            img = tv_transf_F.resize(img, self.resize_size)
+            if self.resize_target:
+                target = tv_transf_F.resize(target, self.resize_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
 
-        img = tv_tensors.Image(img)
-        target = tv_tensors.Mask(target)
-
-        img, target = self.transform(img, target)
-        target = target[0]
+        img = img.float()/255
+        target = target.to(dtype=torch.int64)[0]
 
         return img, target
-
 
 def get_dataset_drive_train(
         dataset_path, 
@@ -131,11 +110,11 @@ def get_dataset_drive_train(
     drive_params = {
         'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
     }
-    if "file" in split_strategy:
+    if split_strategy=="file":
         files_train = open(dataset_path/'train.csv').read().splitlines()
         files_valid = open(dataset_path/'val.csv').read().splitlines()
-        ds_train = DRIVE(dataset_path, files=files_train, **drive_params)
-        ds_valid = DRIVE(dataset_path, files=files_valid, **drive_params)
+        ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
+        ds_valid = DRIVE(dataset_path, split="all", files=files_valid, **drive_params)
 
     elif "train" in split_strategy:
         ds = DRIVE(dataset_path, **drive_params)
@@ -160,3 +139,53 @@ def get_dataset_drive_train(
     ds_valid.transforms = ValidTransforms(resize_size)
 
     return ds_train, ds_valid, class_weights, ignore_index, collate_fn
+
+def get_dataset_drive_test(
+        dataset_path, 
+        split_strategy="default", 
+        resize_size = None, 
+        channels="all",
+        use_ignore_index=True
+        ):
+    """Get the DRIVE dataset used for training and test.
+    Parameters
+    ----------
+    dataset_path
+        Path to the dataset root folder
+    split_strategy
+        Strategy to split the dataset. Possible values are:
+        "default": Use the default train/test split of the dataset
+        "file": Use the train.csv and test.csv files to split the dataset
+    resize_size
+        Size to resize the images
+    channels
+        Image channels to use. Options are:
+        "all": Use all channels
+        "green": Use only the green channel
+        "gray": Convert the image to grayscale
+    use_ignore_index
+        If True, the ignore index is set to 2. Otherwise, it is set to None
+    """
+
+    class_weights = (0.13, 0.87)
+    ignore_index = 2 if use_ignore_index else None
+
+    dataset_path = Path(dataset_path)
+
+    drive_params = {
+        'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
+    }
+    if split_strategy=="default":
+        ds_train = DRIVE(dataset_path, split="train", **drive_params)
+        ds_test = DRIVE(dataset_path, split="test", **drive_params)
+    elif split_strategy=="file":
+        files_train = open(dataset_path/'train.csv').read().splitlines()
+        ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
+        files_test = open(dataset_path/'test.csv').read().splitlines()
+        ds_test = DRIVE(dataset_path, split="all", files=files_test, **drive_params)
+
+    ds_train.transforms = ValidTransforms(resize_size)
+    ds_test.transforms = ValidTransforms(resize_size, resize_target=False)
+
+
+    return ds_train, ds_test, class_weights, ignore_index
