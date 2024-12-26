@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
 from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_imgs
 from torchtrainer.util.train_util import ParseKwargs, ParseText
-from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics, ROCAUCScore
+from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics
 
 # TODO: wandb 
 # TODO: profiling
@@ -227,7 +227,7 @@ class DefaultTrainer:
             resize_size, 
             augmentation_strategy, 
             **dataset_params):
-        """This method receives dataset parameters received from the command line
+        """This method receives dataset parameters from the command line
         and returns the training and validation datasets as well as relevant dataset 
         properties.
 
@@ -246,10 +246,8 @@ class DefaultTrainer:
             "When `dataset_class` is not one of the default datasets, the get_dataset "
             "method must be implemented in the Trainer subclass")
 
-        # Example returns
-        ds_train, ds_valid, class_weights, ignore_index, collate_fn = (None,)*5
-
-        return ds_train, ds_valid, class_weights, ignore_index, collate_fn
+        # Example return:
+         #return ds_train, ds_valid, class_weights, ignore_index, collate_fn
 
     def setup_dataset(self):
         """ Setup the dataset and related elements."""
@@ -270,12 +268,27 @@ class DefaultTrainer:
             split = float(split_strategy)
             ds_train, ds_valid, *dataset_props = get_dataset(dataset_path, split, resize_size)
             class_weights, ignore_index, collate_fn = dataset_props
+
         elif dataset_class=='drive':
             from torchtrainer.datasets.vessel import get_dataset_drive_train
 
             ds_train, ds_valid, *dataset_props = get_dataset_drive_train(
                 dataset_path, split_strategy, resize_size, **dataset_params)
             class_weights, ignore_index, collate_fn = dataset_props
+
+        elif dataset_class=='vessmap':
+            from torchtrainer.datasets.vessel import get_dataset_vessmap_train
+
+            ds_train, ds_valid, *dataset_props = get_dataset_vessmap_train(
+                dataset_path, split_strategy, resize_size, **dataset_params)
+            class_weights, ignore_index, collate_fn = dataset_props
+
+        elif dataset_class=='fake_segmentation':
+            from torchtrainer.datasets.fake_data import get_dataset
+
+            ds_train, ds_valid, *dataset_props = get_dataset()
+            class_weights, ignore_index, collate_fn = dataset_props
+
         else:
             # If the dataset is not recognized, the get_dataset method must be implemented
             ds_train, ds_valid, class_weights, ignore_index, collate_fn = self.get_dataset(
@@ -307,7 +320,8 @@ class DefaultTrainer:
             loss_func = SingleChannelCrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
                                             ignore_index=ignore_index)
         elif loss_function=='bce':
-            if ignore_index==-100:
+            if ignore_index!=-100:
+                # TODO: fix: If the dataset uses -100 as ignore_index, this message is not shown
                 raise ValueError('The BCE loss does not support ignore_index')
             # We use class_weights[1]/class_weights[0] for class 1 because the weight of class 0
             # in BCE is always 1
@@ -316,19 +330,17 @@ class DefaultTrainer:
             raise ValueError(f'Loss function {loss_function} not recognized')
 
         conf_metrics = ConfusionMatrixMetrics(ignore_index=ignore_index)
-        roc_auc_score = ROCAUCScore("binary", ignore_index=ignore_index)
         # conf_metrics() returns 5 values. To set names to these
         # values, we need to wrap it in a WrapDict object.
         perf_funcs = [
-            WrapDict(conf_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice']),
-            WrapDict(roc_auc_score, ['AUC'])
+            WrapDict(conf_metrics, ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'])
         ]
 
         logger = Logger()
         # How to group the data when plotting, each group becomes an individual plot
         logger_plotter = LoggerPlotter([
             {'names': ['Train loss', 'Validation loss'], 'y_max': 1.},
-            {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice', 'AUC'], 'y_max': 1.}
+            {'names': ['Accuracy', 'IoU', 'Precision', 'Recall', 'Dice'], 'y_max': 1.}
         ])
 
         num_classes = len(class_weights)
@@ -371,17 +383,21 @@ class DefaultTrainer:
 
         if model_class=='simple_encoder_decoder':
             from torchtrainer.models.simple_encoder_decoder import get_model
-
             model = get_model(**model_params, num_classes=num_classes, 
                               weights_strategy=weights_strategy)
+            
         elif model_class=='unet_lw':
             from torchtrainer.models.unet_lw import get_model
-
             model = get_model(num_channels=num_channels, num_classes=num_classes)
+
+        elif model_class=='unet_custom':
+            from torchtrainer.models.unet_custom import get_model
+            model = get_model(num_channels=num_channels, num_classes=num_classes, **model_params)
+
         elif model_class=='test_model':
             from torchtrainer.models.testing import TestSegmentation
-
             model = TestSegmentation(num_channels=num_channels, num_classes=num_classes)
+
         else:
             model = self.get_model(model_class, weights_strategy, num_classes, num_channels, **model_params)
                 
@@ -463,9 +479,9 @@ class DefaultTrainer:
         """Start the training loop."""
 
         args = self.args
-        runner = self.module_runner
-        logger = runner.logger
-        logger_plotter = runner.logger_plotter
+        module_runner = self.module_runner
+        logger = module_runner.logger
+        logger_plotter = module_runner.logger_plotter
         run_path = self.run_path
 
         seed_all(args.seed)
@@ -489,11 +505,11 @@ class DefaultTrainer:
         )
         try:
             for epoch in pbar:
-                runner.train_one_epoch(epoch)
+                module_runner.train_one_epoch(epoch)
                 validate = epoch==0 or epoch==args.num_epochs-1 or epoch%args.validate_every==0
 
                 if validate:
-                    runner.validate_one_epoch(epoch)
+                    module_runner.validate_one_epoch(epoch)
 
                 # Aggregate batch metrics into epoch metrics and get the data
                 logger.end_epoch()
@@ -511,7 +527,7 @@ class DefaultTrainer:
                 # Save plot of logged data
                 logger_plotter.get_plot(logger).savefig(run_path/'plots.png')
                 
-                checkpoint = runner.state_dict()
+                checkpoint = module_runner.state_dict()
 
                 # Save the checkpoint and a copy of it if required
                 torch.save(checkpoint, run_path/'checkpoint.pt')
@@ -520,7 +536,7 @@ class DefaultTrainer:
 
                 if validate:
                     if args.save_val_imgs:
-                        predict_and_save_val_imgs(runner, epoch, args.val_img_indices, run_path)                  
+                        predict_and_save_val_imgs(module_runner, epoch, args.val_img_indices, run_path)                  
 
                     # Check for model improvement
                     val_metric = last_metrics[val_metric_name]
@@ -547,6 +563,8 @@ class DefaultTrainer:
         config_dict['timestamp_end'] = timestamp
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
         open(run_path/'config.yaml', 'w').write(args_yaml)
+
+        return module_runner
 
     def get_args(self, param_dict: dict | None = None) -> argparse.Namespace:
         """Parse command line arguments or arguments from a string.

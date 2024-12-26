@@ -1,5 +1,7 @@
 """U-Net architecture made by Prof. Cesar Comin"""
 
+from pathlib import Path
+import torch
 from torch import nn
 from .layers import BasicBlock, Upsample, Concat, conv3x3, conv1x1
 from ..util.module_util import Hook
@@ -15,7 +17,7 @@ class UNetCustom(nn.Module):
         Number of residual blocks for each stage of the decoder. Must have the same size as blocks_per_encoder_stage`.
     channels_per_stage : list
         Number of channels of each stage. Must have the same size as blocks_per_encoder_stage`.
-    in_channels : int
+    num_channels : int
         Number of channels of the input image.
     num_classes : int
         Number of classes for the output.
@@ -24,7 +26,7 @@ class UNetCustom(nn.Module):
         the residual block acts as an identity layer.
     """
 
-    def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, in_channels=1, num_classes=2, upsample_strategy='interpolation', zero_init_residual=False):
+    def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels=1, num_classes=2, upsample_strategy='interpolation', zero_init_residual=False):
         super().__init__()
 
         num_stages = len(blocks_per_encoder_stage)
@@ -38,7 +40,7 @@ class UNetCustom(nn.Module):
         self.upsample_strategy = upsample_strategy
         
         self.stage_input = nn.Sequential(
-            nn.Conv2d(in_channels, channels_per_stage[0], kernel_size=7, stride=1, padding=3, bias=False),
+            nn.Conv2d(num_channels, channels_per_stage[0], kernel_size=7, stride=1, padding=3, bias=False),
             self.norm_layer(channels_per_stage[0], momentum=0.1),
             nn.ReLU(inplace=True),
         )
@@ -227,3 +229,15 @@ def get_main_resunet_modules(model, depth=1, include_decoder=True):
         module_names.append('conv_output')
 
     return module_names
+
+def get_model(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels=1, num_classes=2, weights_strategy=None):
+
+    model = UNetCustom(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels, num_classes)
+
+    # Check if weights_strategy is a path to a checkpoint file
+    if weights_strategy is not None:
+        weights_path = Path(weights_strategy)
+        if weights_path.is_file():
+            model.load_state_dict(torch.load(weights_path))
+
+    return model

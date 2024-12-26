@@ -2,7 +2,6 @@ from tqdm.auto import tqdm
 import torch
 from torchvision.transforms.v2.functional import resize
 from torchtrainer.metrics import ConfusionMatrixMetrics
-from torchtrainer.util.post_processing import logits_to_preds
 
 class TTATransform:
     """Base TTA transform class. Every transform must implement the __call__ method 
@@ -122,7 +121,22 @@ def predict_tta(model, img, transforms, type='probs'):
     return avg_scores
 
 @torch.no_grad()
-def find_optimal_threshold(model, ds, ignore_index=None, device='cuda'):
+def find_optimal_threshold(model, ds, ignore_index=None, device='cuda') -> float:
+    """
+    Find the optimal threshold to apply to model predictions so as to maximize
+    the Dice score.
+
+    Parameters
+    ----------
+    model
+        The model to use for prediction
+    ds
+        The dataset to use
+    ignore_index
+        The index to ignore on the target when computing the metric
+    device
+        The device to use for prediction
+    """
 
     model.eval()
     model.to(device)
