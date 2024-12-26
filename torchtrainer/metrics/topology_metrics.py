@@ -1,6 +1,7 @@
 import numpy as np
 from skimage.morphology import skeletonize
 import torch
+from ..util.post_processing import logits_to_preds
 
 type CpuOrCudaTensor = torch.Tensor
 
@@ -38,7 +39,8 @@ def cl_dice(
     ) -> torch.Tensor:
     """Calculate the clDice metric for a batch of data."""
 
-    preds = scores.argmax(dim=1).cpu().numpy()>0
+    preds = logits_to_preds(scores, return_indices=True)
+    preds = preds.cpu().numpy()>0
     targets = targets.cpu().numpy()>0
 
     scores = []
