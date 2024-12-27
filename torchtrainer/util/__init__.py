@@ -1,1 +1,9 @@
-from . import data_util, img_util, inspector, model_debug, module_util, profiling, train_util
+from . import data_util as data_util
+from . import img_util as img_util
+from . import inspector as inspector
+from . import model_debug as model_debug
+from . import module_util as module_util
+from . import post_processing as post_processing
+from . import profiling as profiling
+from . import test_util as test_util
+from . import train_util as train_util

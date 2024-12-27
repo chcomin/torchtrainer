@@ -1,10 +1,12 @@
-'''Useful functions for debugging modules.'''
+"""Useful functions for debugging modules."""
 
 import matplotlib.pyplot as plt
 import torch
 
+
 def debug_model_state(model, batch, labels, loss_func, plot=True):
-    '''Get minimum and maximum values for all activations, parameters, gradients and buffers of a model.'''
+    """Get minimum and maximum values for all activations, parameters, gradients and buffers of 
+    a model."""
 
     # eval to avoid changing batchnorm stats
     if model.training:
@@ -27,7 +29,7 @@ def debug_model_state(model, batch, labels, loss_func, plot=True):
         stats_act.append((name, output.min(), output.max()))
 
     handles = []
-    for name, module in model.named_modules(prefix='model'):
+    for _, module in model.named_modules(prefix='model'):
         # No need to save relu activations, we known what they are
         if not isinstance(module, torch.nn.ReLU):
             handle = module.register_forward_hook(hook)

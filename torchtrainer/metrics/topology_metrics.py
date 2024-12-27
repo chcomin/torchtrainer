@@ -1,6 +1,7 @@
 import numpy as np
-from skimage.morphology import skeletonize
 import torch
+from skimage.morphology import skeletonize
+
 from ..util.post_processing import logits_to_preds
 
 type CpuOrCudaTensor = torch.Tensor

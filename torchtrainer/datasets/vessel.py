@@ -1,14 +1,17 @@
 """The objective of the dataset classes here is to provide the minimal code to load the
 images from the respective datasets. """
 
-from pathlib import Path
 import random
+from pathlib import Path
+
 import torch
+from torchvision import tv_tensors
 from torchvision.transforms import v2 as tv_transf
 from torchvision.transforms.v2 import functional as tv_transf_F
-from torchvision import tv_tensors
+
 from ..datasets.vessel_base import DRIVE, VessMAP
 from ..util.train_util import Subset
+
 
 class TrainTransforms:
 
@@ -40,7 +43,9 @@ class TrainTransforms:
 
         img = tv_transf_F.resize(img, self.resize_size)
         if self.resize_target:
-            target = tv_transf_F.resize(target, self.resize_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+            target = tv_transf_F.resize(target, 
+                                        self.resize_size, 
+                                        interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
 
         img = tv_tensors.Image(img)
         target = tv_tensors.Mask(target)
@@ -66,7 +71,9 @@ class ValidTransforms:
         if self.resize_size is not None:
             img = tv_transf_F.resize(img, self.resize_size)
             if self.resize_target:
-                target = tv_transf_F.resize(target, self.resize_size, interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
+                target = tv_transf_F.resize(target, 
+                                            self.resize_size, 
+                                            interpolation=tv_transf.InterpolationMode.NEAREST_EXACT)
 
         img = img.float()/255
         target = target.to(dtype=torch.int64)[0]
@@ -111,8 +118,10 @@ def get_dataset_drive_train(
         'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
     }
     if split_strategy=="file":
-        files_train = open(dataset_path/'train.csv').read().splitlines()
-        files_valid = open(dataset_path/'val.csv').read().splitlines()
+        with open(dataset_path/'train.csv') as file:
+            files_train = file.read().splitlines()
+        with open(dataset_path/'val.csv') as file:
+            files_valid = file.read().splitlines()
         ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
         ds_valid = DRIVE(dataset_path, split="all", files=files_valid, **drive_params)
 
@@ -182,9 +191,11 @@ def get_dataset_drive_test(
         ds_train = DRIVE(dataset_path, split="train", **drive_params)
         ds_test = DRIVE(dataset_path, split="test", **drive_params)
     elif split_strategy=="file":
-        files_train = open(dataset_path/'train.csv').read().splitlines()
+        with open(dataset_path/'train.csv') as file:
+            files_train = file.read().splitlines()
         ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
-        files_test = open(dataset_path/'test.csv').read().splitlines()
+        with open(dataset_path/'test.csv') as file:
+            files_test = file.read().splitlines()
         ds_test = DRIVE(dataset_path, split="all", files=files_test, **drive_params)
 
     ds_train.transforms = ValidTransforms(resize_size)
@@ -236,8 +247,10 @@ def get_dataset_vessmap_train(
         ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
     elif split_strategy=="file":
-        files_train = open(dataset_path/'train.csv').read().splitlines()
-        files_valid = open(dataset_path/'val.csv').read().splitlines()
+        with open(dataset_path/'train.csv') as file:
+            files_train = file.read().splitlines()
+        with open(dataset_path/'val.csv') as file:
+            files_valid = file.read().splitlines()
         ds_train = VessMAP(dataset_path, keepdim=True, files=files_train)
         ds_valid = DRIVE(dataset_path, keepdim=True, files=files_valid)
 

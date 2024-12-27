@@ -1,6 +1,7 @@
 """Functions for dealing with the output of a network"""
 import torch
 
+
 def logits_to_preds(
         scores: torch.Tensor,
         task: str = "binary", 
@@ -19,8 +20,9 @@ def logits_to_preds(
         The type of classification task. Must be one of 'binary', 'multiclass', or 'multilabel'.
     return_indices
         If False, returns class probabilities. If True, returns the predicted class indices.
-        For binary and multilabel classification, the indices are calculated by thresholding the probabilities.
-        For multiclass classification, the indices are given by the argmax of the probabilities along the class dimension.
+        For binary and multilabel classification, the indices are calculated by thresholding the 
+        probabilities. For multiclass classification, the indices are given by the argmax of the 
+        probabilities along the class dimension.
     threshold
         The threshold to apply to the predicted probabilities.
 

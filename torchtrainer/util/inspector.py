@@ -2,30 +2,36 @@
 
 from collections.abc import Callable
 from typing import Optional, Union
+
 import torch
 import torch.nn as nn
 
+
 class Inspector:
-    """Inspector class for capturing modules' parameters, gradients, activations and activation gradients."""
+    """Inspector class for capturing modules' parameters, gradients, activations and activation 
+    gradients."""
     
     def __init__(self, model: nn.Module, modules_to_track: Optional[list[nn.Module]] = None, 
                  agg_func: Optional[Callable] = None, track_relu: Optional[bool] = False) -> None:
-        """Inspector class for capturing modules' parameters, gradients, activations and activation gradients.
+        """Inspector class for capturing modules' parameters, gradients, activations and activation
+        gradients.
 
-        If agg_func is provided, this function will be applied to the tracked data on the same devide where the model
-        resides. This is useful for aggregating the data before copying from gpu to cpu to avoid an expensive copy. 
-        One can, for instance, return only the average value of the data. This function must have signature 
-        agg_func(data, module_name, data_type, param_name=None), where `data` is a tensor, `module_name` is a string 
-        containing the name of a layer, `data_type` can be 'param' (layer parameter), 'grad' (layer parameter gradient), 
-        'act' (layer activation), 'act_grad' (layer activation gradient) and param_name contains the name of the parameter 
-        in case of 'param' and 'grad'.
+        If agg_func is provided, this function will be applied to the tracked data on the same 
+        evice where the model resides. This is useful for aggregating the data before copying from 
+        gpu to cpu to avoid an expensive copy. One can, for instance, return only the average value 
+        of the data. This function must have signature agg_func(data, module_name, data_type, 
+        param_name=None), where `data` is a tensor, `module_name` is a string containing the name 
+        of a layer, `data_type` can be 'param' (layer parameter), 'grad' (layer parameter gradient),
+        'act' (layer activation), 'act_grad' (layer activation gradient) and param_name contains 
+        the name of the parameter in case of 'param' and 'grad'.
 
         Args:
             model: the model to inspect.
-            modules_to_track: if None, track all layers of the model. If list, track the specified layers. the layers
+            modules_to_track: if None, track all layers of the model. If list, track the specified 
+                layers. the layers
             are specified as, for instance, [model.layer1, model.layer2.conv1, ...]
             agg_func: function used to process the tracked data. See above for an explanation.
-            track_relu: if False (default), will not track relu activations. 
+            track_relu: if False (default), will not track relu activations.
 
         Example:
             Getting all the data about a model:
@@ -90,9 +96,9 @@ class Inspector:
         return self._capture_params_grads('param', return_dict)
         
     def get_grads(self, return_dict: Optional[bool] = False) -> Union[dict,list]:
-        """Get model parameters gradients. If return_dict is True, the returned dictionary has the format 
-        {layer_name: {param_name: data,...},...}. If return_dict is False, the returned list has the
-        format [(layer_name.param_name, data),...].
+        """Get model parameters gradients. If return_dict is True, the returned dictionary has the 
+        format {layer_name: {param_name: data,...},...}. If return_dict is False, the returned 
+        list has the format [(layer_name.param_name, data),...].
         
         Args:
             return_dict: if false, returns a list.
@@ -113,9 +119,9 @@ class Inspector:
         return self.model_acts['act_grad']
 
     def start_tracking_activations(self, erase: Optional[bool]=True) -> None:
-        '''Start tracking model activations. Warning, tracking activations leads to slower model execution.`
-        When a call to model.forward() is executed, the activations are saved internally and can be retrieved
-        using the `get_activations()` method.
+        '''Start tracking model activations. Warning, tracking activations leads to slower model 
+        execution.When a call to model.forward() is executed, the activations are saved internally 
+        and can be retrieved using the `get_activations()` method.
         
         Args:
             erase: if True, the internally saved activations are erased.
@@ -127,9 +133,9 @@ class Inspector:
         self._add_activation_hooks()
 
     def start_tracking_act_grads(self, erase: Optional[bool]=True) -> None:
-        '''Start tracking the gradients of the activations. Warning, tracking activation gradients leads to slower model execution.
-        When a call to model.forward() is executed, the gradients are saved internally and can be retrieved
-        using the `get_act_grads()` method.
+        '''Start tracking the gradients of the activations. Warning, tracking activation gradients 
+        leads to slower model execution. When a call to model.forward() is executed, the gradients 
+        are saved internally and can be retrieved using the `get_act_grads()` method.
 
         Note: tracking activation gradients do not work for models that do inplace
         operations. For instance, x += tensor is an inplace operation.
@@ -204,7 +210,7 @@ class Inspector:
         """Add hooks to modules."""
 
         act_hook_handles = []
-        for module, module_name in self.dict_module_to_str.items():
+        for module, _ in self.dict_module_to_str.items():
             # Add one hook for each module
             handler_for = module.register_forward_hook(self.forward_hook)
             act_hook_handles.append(handler_for)
@@ -215,7 +221,7 @@ class Inspector:
         '''Add hooks to modules.'''
 
         act_grad_hook_handles = []
-        for module, module_name in self.dict_module_to_str.items():
+        for module, _ in self.dict_module_to_str.items():
             handler_back = module.register_full_backward_hook(self.backward_hook)
             act_grad_hook_handles.append(handler_back)
         
@@ -305,10 +311,7 @@ def agg_func_stats(data, module_name, data_type, param_name=None):
     mean = data.mean()
     min = data.min()
     max = data.max()
-    if min==max:
-        std = 0
-    else:
-        std = data.std()
+    std = 0 if min == max else data.std()
     res = torch.tensor([mean, std, min, max])
     
     return res
@@ -316,21 +319,21 @@ def agg_func_stats(data, module_name, data_type, param_name=None):
 def flatten_data(data: dict) -> tuple[torch.Tensor, torch.Tensor]:
 
     num_el = 0
-    for module_name, module_data in data.items():
+    for _, module_data in data.items():
         if isinstance(module_data, torch.Tensor):
             num_el += module_data.numel()
         else:
-            for param_name, param_data in module_data.items():
+            for _, param_data in module_data.items():
                 num_el += param_data.numel()
 
     flattened_data = torch.zeros(num_el)
     idx = 0
-    for module_name, module_data in data.items():
+    for _, module_data in data.items():
         if isinstance(module_data, torch.Tensor):
             num_el = module_data.numel()
             flattened_data[idx:idx+num_el] = module_data.view(-1)
         else:
-            for param_name, param_data in module_data.items():
+            for _, param_data in module_data.items():
                 num_el = param_data.numel()
                 flattened_data[idx:idx+num_el] = param_data.view(-1)  
 

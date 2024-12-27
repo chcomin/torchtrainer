@@ -1,15 +1,18 @@
-from pathlib import Path
-import shutil
 import argparse
-import yaml
-from tqdm.auto import tqdm
+import shutil
+from pathlib import Path
+
 import pandas as pd
 import torch
 import torch.utils
+import yaml
 from torchvision.transforms.v2 import functional as tv_transf_F
-from torchtrainer.util.train_util import WrapDict, ParseKwargs, dict_to_argv, seed_all
+from tqdm.auto import tqdm
+
 from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics, ROCAUCScore
 from torchtrainer.util import test_util
+from torchtrainer.util.train_util import ParseKwargs, WrapDict, dict_to_argv, seed_all
+
 
 @torch.no_grad()
 def test(param_dict=None):
@@ -91,7 +94,8 @@ def test(param_dict=None):
 
     threshold = args.threshold
     if threshold==-1:
-        threshold = test_util.find_optimal_threshold(model, ds_train, ignore_index=ignore_index, device=device)
+        threshold = test_util.find_optimal_threshold(
+            model, ds_train, ignore_index=ignore_index, device=device)
 
     # Performance scores
     conf_metrics = ConfusionMatrixMetrics(threshold=threshold, ignore_index=ignore_index)
@@ -157,7 +161,8 @@ def test(param_dict=None):
     config_dict = vars(args)
     config_dict['threshold'] = threshold
     args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
-    open(inference_path/'test_config.yaml', 'w').write(args_yaml)
+    with open(inference_path/'test_config.yaml', 'w') as file:
+        file.write(args_yaml)
 
     return ds_test, metrics_df
 
@@ -192,33 +197,46 @@ def get_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-n', '--run_path', default='no_name_run', metavar='NAME', help='Path to the run data of an experiment')
-    parser.add_argument('--tta_type', type=str, default='none', choices=['none', 'logits', 'probs'], 
-                        help='Test-time augmentation type. The logits and probs options set the type of values used for TTA averaging.')
+    parser.add_argument('-n', '--run_path', default='no_name_run', metavar='NAME', 
+                        help='Path to the run data of an experiment')
+    parser.add_argument('--tta_type', type=str, default='none', choices=['none', 'logits', 'probs'],
+                        help='Test-time augmentation type. The logits and probs options set the '
+                             'type of values used for TTA averaging.')
     parser.add_argument('--threshold', type=float, default=0.5, 
-                        help='Threshold to use for binary classification. If -1, uses a threshold that maximizes the Dice score on the training dataset.')
+                        help='Threshold to use for binary classification. If -1, uses a threshold '
+                             'that maximizes the Dice score on the training dataset.')
 
     # Dataset parameters
     parser.add_argument('dataset_path', help='Path to the dataset root directory')        
     parser.add_argument('dataset_class', help='Name of the dataset class to use')
-    parser.add_argument('--resize_size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), help='Size to resize the images. E.g. --resize_size 128 128')
-    parser.add_argument('--dataset_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                    help='Additional parameters to pass to the dataset creation function. E.g. --dataset_params par1=v1 par2=v2 par3=v3. '
-                    'The additional parameters are evaluated as Python code and cannot contain spaces.')
+    parser.add_argument('--resize_size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), 
+                        help='Size to resize the images. E.g. --resize_size 128 128')
+    parser.add_argument('--dataset_params', nargs='*', default={}, action=ParseKwargs, 
+                        metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the dataset creation function. '
+                             'E.g. --dataset_params par1=v1 par2=v2 par3=v3. The additional '
+                             'parameters are evaluated as Python code and cannot contain spaces.')
  
     # Model parameters
     parser.add_argument('model_class', help='Name of the trained model')
-    parser.add_argument('--model_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                    help='Additional parameters to pass to the model creation function. E.g. --model_params par1=v1 par2=v2 par3=v3')
+    parser.add_argument('--model_params', nargs='*', default={}, action=ParseKwargs, 
+                        metavar='par1=v1 par2=v2 par3=v3', 
+                        help='Additional parameters to pass to the model creation function. '
+                             'E.g. --model_params par1=v1 par2=v2 par3=v3')
 
-    parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed for the random number generator')
+    parser.add_argument('--seed', type=int, default=0, metavar='N', 
+                        help='Seed for the random number generator')
 
     # Device and efficiency parameters
     group = parser.add_argument_group('Device and efficiency parameters')
-    group.add_argument('--device', default='cuda:0', help='Where to run the test code (e.g. "cpu" or "cuda:0")')
-    group.add_argument('--use_amp', action='store_true', help='If automatic mixed precision should be used')
-    group.add_argument('--deterministic', action='store_true', help='If deterministic algorithms should be used')
-    group.add_argument('--benchmark', action='store_true', help='If cuda benchmark should be used')
+    group.add_argument('--device', default='cuda:0', 
+                       help='Where to run the test code (e.g. "cpu" or "cuda:0")')
+    group.add_argument('--use_amp', action='store_true', 
+                       help='If automatic mixed precision should be used')
+    group.add_argument('--deterministic', action='store_true', 
+                       help='If deterministic algorithms should be used')
+    group.add_argument('--benchmark', action='store_true', 
+                       help='If cuda benchmark should be used')
 
     return parser
 

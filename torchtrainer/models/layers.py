@@ -1,9 +1,11 @@
 "Some useful neural net layers"
 
 from collections.abc import Iterable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 def conv3x3(in_channels, out_channels, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -12,7 +14,9 @@ def conv3x3(in_channels, out_channels, stride=1, groups=1, dilation=1):
 
 def conv1x1(in_channels, out_channels, stride=1, groups=1):
     """1x1 convolution"""
-    return nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, groups=groups, bias=False)
+    return nn.Conv2d(
+        in_channels, out_channels, kernel_size=1, stride=stride, groups=groups, bias=False
+        )
 
 def ntuple(x, n):
     '''Verify if x is iterable. If not, create tuple containing x repeated n times'''
@@ -58,14 +62,23 @@ class Upsample(nn.Module):
     upsample_strategy can be 'interpolation', 'conv_transpose' or 'grid'.
     '''
 
-    def __init__(self, in_channels=None, out_channels=None, stride=2, upsample_strategy='interpolation', mode='nearest'):
+    def __init__(
+            self, 
+            in_channels=None,
+            out_channels=None, 
+            stride=2, 
+            upsample_strategy='interpolation', 
+            mode='nearest'
+            ):
         super().__init__()
 
         if upsample_strategy=='conv_transpose':
-            #kernel_size=4 because the input tensor will be filled with zeros as [a, 0., b, 0., c, 0.,...] and
-            #kernel_size=3 would only reach a single value in some positions. Also, with kernel_size=4 the size
-            #of the output is always exactly double of the input for stride=2.
-            self.conv = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False),
+            # kernel_size=4 because the input tensor will be filled with zeros as 
+            # [a, 0., b, 0., c, 0.,...] and kernel_size=3 would only reach a single value in some 
+            # positions. Also, with kernel_size=4 the size of the output is always exactly double 
+            # of the input for stride=2.
+            self.conv = nn.Sequential(nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, 
+                                                         stride=stride, padding=1, bias=False),
                                       nn.BatchNorm2d(out_channels),
                                       nn.ReLU(inplace=True)
             )
@@ -99,8 +112,8 @@ class Upsample(nn.Module):
         return x
 
 class Interpolate(nn.Module):
-    '''Layer that receives two inputs when called: x and output_shape. The layer interpolates the input
-    to the desired output.'''
+    '''Layer that receives two inputs when called: x and output_shape. The layer interpolates the 
+    input to the desired output.'''
 
     def __init__(self, mode='nearest'):
         super().__init__()
@@ -141,8 +154,11 @@ class InterpolateGrid(nn.Module):
     def forward(self, x, output_shape):
         return interpolate_grid_sample(x, output_shape, mode=self.mode)
 
-def interpolate_grid_sample(input, size=None, scale_factor=None, mode='nearest', half_r=True, half_c=True):
-    '''Interpolate tensor using half pixel shifts, which preserves the position of the receptive field.'''
+def interpolate_grid_sample(
+        input, size=None, scale_factor=None, mode='nearest', half_r=True, half_c=True
+        ):
+    '''Interpolate tensor using half pixel shifts, which preserves the position of the 
+    receptive field.'''
 
     if size is None and scale_factor is None:
         raise ValueError("Either size os scale_factor must be given")
@@ -158,14 +174,8 @@ def interpolate_grid_sample(input, size=None, scale_factor=None, mode='nearest',
     else:
         nr_o, nc_o = size
 
-    if half_r:
-        delta_r = 0.5
-    else:
-        delta_r = 0.
-    if half_c:
-        delta_c = 0.5
-    else:
-        delta_c = 0.
+    delta_r = 0.5 if half_r else 0.0
+    delta_c = 0.5 if half_c else 0.0
 
     r = nr_i*(torch.arange(0, nr_o)+0.5)/nr_o + delta_r
     rn = 2*(r/nr_i - 0.5)
@@ -203,7 +213,7 @@ class Concat(nn.Module):
     '''Module for concatenating two activations using interpolation'''
 
     def __init__(self, concat_dim=1):
-        super(Concat, self).__init__()
+        super().__init__()
         self.concat_dim = concat_dim
 
     def forward(self, x1, x2):
@@ -226,7 +236,7 @@ class Concat(nn.Module):
 class Blur(nn.Module):
 
     def __init__(self):
-        super(Blur, self).__init__()
+        super().__init__()
 
         self.pad = nn.ReplicationPad2d((0,1,0,1))
         self.blur = nn.AvgPool2d(2, stride=1)
@@ -236,10 +246,11 @@ class Blur(nn.Module):
         return self.blur(self.pad(x))
 
 class Conv2dCH(nn.Module):
-    """Create 2D cross-hair convolution filter. Parameters are the same as torch.nn.Conv2d, with the exception
-    that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the filter would need negative padding
-    to properly work) and dilation is not supported. Also, if padding is not provided it will be equal to (kernel_size-1)//2.
-    That is, by default the result of the convolution has the same shape as the input tensor.
+    """Create 2D cross-hair convolution filter. Parameters are the same as torch.nn.Conv2d, with 
+    the exception that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the 
+    filter would need negative padding to properly work) and dilation is not supported. Also, if 
+    padding is not provided it will be equal to (kernel_size-1)//2. That is, by default the result 
+    of the convolution has the same shape as the input tensor.
 
     Parameters
     ----------
@@ -261,9 +272,18 @@ class Conv2dCH(nn.Module):
         Padding mode to use.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None, groups=1, bias=True,
-                 padding_mode='zeros'):
-        super(Conv2dCH, self).__init__()
+    def __init__(
+            self, 
+            in_channels, 
+            out_channels, 
+            kernel_size, 
+            stride=1, 
+            padding=None, 
+            groups=1, 
+            bias=True,
+            padding_mode='zeros'
+            ):
+        super().__init__()
 
         kernel_size = ntuple(kernel_size, 2)
         stride = ntuple(stride, 2)
@@ -282,12 +302,16 @@ class Conv2dCH(nn.Module):
 
         pad_conv1d_v_h = padding[1]-(kernel_size[1]-1)//2
         pad_conv1d_h_v = padding[0]-(kernel_size[0]-1)//2
-        self.conv1d_v = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                 kernel_size=(kernel_size[0], 1), stride=stride, padding=(padding[0], pad_conv1d_v_h),
-                                 groups=groups, bias=bias, padding_mode=padding_mode)
-        self.conv1d_h = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                 kernel_size=(1, kernel_size[1]), stride=stride, padding=(pad_conv1d_h_v, padding[1]),
-                                 groups=groups, bias=bias, padding_mode=padding_mode)
+        self.conv1d_v = nn.Conv2d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=(kernel_size[0], 1), 
+            stride=stride, padding=(padding[0], pad_conv1d_v_h), groups=groups, bias=bias, 
+            padding_mode=padding_mode
+            )
+        self.conv1d_h = nn.Conv2d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=(1, kernel_size[1]), 
+            stride=stride, padding=(pad_conv1d_h_v, padding[1]), groups=groups, bias=bias, 
+            padding_mode=padding_mode
+            )
 
         self.reset_parameters()
 
@@ -307,10 +331,11 @@ class Conv2dCH(nn.Module):
 
 class Conv3dCH(nn.Module):
 
-    """Create 3D cross-hair convolution filter. Parameters are the same as torch.nn.Conv3d, with the exception
-    that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the filter would need negative padding
-    to properly work) and dilation is not supported. Also, if padding is not provided it will be equal to (kernel_size-1)//2.
-    That is, by default the result of the convolution has the same shape as the input tensor.
+    """Create 3D cross-hair convolution filter. Parameters are the same as torch.nn.Conv3d, with 
+    the exception that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the 
+    filter would need negative padding to properly work) and dilation is not supported. Also, if 
+    padding is not provided it will be equal to (kernel_size-1)//2. That is, by default the result 
+    of the convolution has the same shape as the input tensor.
 
     Parameters
     ----------
@@ -332,9 +357,18 @@ class Conv3dCH(nn.Module):
         Padding mode to use.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None, groups=1, bias=True,
-                 padding_mode='zeros'):
-        super(Conv3dCH, self).__init__()
+    def __init__(
+            self, 
+            in_channels, 
+            out_channels, 
+            kernel_size, 
+            stride=1, 
+            padding=None, 
+            groups=1, 
+            bias=True,
+            padding_mode='zeros'
+            ):
+        super().__init__()
 
         kernel_size = ntuple(kernel_size, 3)
         stride = ntuple(stride, 3)

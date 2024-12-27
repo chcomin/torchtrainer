@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 
+
 def conv1x1(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
@@ -10,7 +11,7 @@ class ConvBlock(torch.nn.Module):
         '''
         pool_mode can be False (no pooling) or True ('maxpool')
         '''
-        super(ConvBlock, self).__init__()
+        super().__init__()
         if shortcut: 
             self.shortcut = nn.Sequential(conv1x1(in_c, out_c), nn.BatchNorm2d(out_c))
         else: 
@@ -43,7 +44,7 @@ class ConvBlock(torch.nn.Module):
 
 class UpsampleBlock(torch.nn.Module):
     def __init__(self, in_c, out_c, up_mode='transp_conv'):
-        super(UpsampleBlock, self).__init__()
+        super().__init__()
         block = []
         if up_mode == 'transp_conv':
             block.append(nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2))
@@ -61,7 +62,7 @@ class UpsampleBlock(torch.nn.Module):
 
 class ConvBridgeBlock(torch.nn.Module):
     def __init__(self, channels, k_sz=3):
-        super(ConvBridgeBlock, self).__init__()
+        super().__init__()
         pad = (k_sz - 1) // 2
         block=[]
 
@@ -77,7 +78,7 @@ class ConvBridgeBlock(torch.nn.Module):
 
 class UpConvBlock(torch.nn.Module):
     def __init__(self, in_c, out_c, k_sz=3, up_mode='up_conv', conv_bridge=False, shortcut=False):
-        super(UpConvBlock, self).__init__()
+        super().__init__()
         self.conv_bridge = conv_bridge
 
         self.up_layer = UpsampleBlock(in_c, out_c, up_mode=up_mode)
@@ -95,7 +96,16 @@ class UpConvBlock(torch.nn.Module):
         return out
 
 class UNetLW(nn.Module):
-    def __init__(self, in_c, n_classes, layers, k_sz=3, up_mode='transp_conv', conv_bridge=True, shortcut=True):
+    def __init__(
+            self, 
+            in_c, 
+            n_classes, 
+            layers, 
+            k_sz=3, 
+            up_mode='transp_conv', 
+            conv_bridge=True, 
+            shortcut=True
+            ):
         super().__init__()
         self.n_classes = n_classes
         self.first = ConvBlock(in_c=in_c, out_c=layers[0], k_sz=k_sz,
@@ -127,7 +137,7 @@ class UNetLW(nn.Module):
     def forward(self, x):
         x = self.first(x)
         down_activations = []
-        for i, down in enumerate(self.down_path):
+        for down in self.down_path:
             down_activations.append(x)
             x = down(x)
         down_activations.reverse()

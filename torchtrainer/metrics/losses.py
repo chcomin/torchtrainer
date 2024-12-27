@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 class SingleChannelCrossEntropyLoss(torch.nn.CrossEntropyLoss):
     """Cross entropy loss for single channel input. This function is a replacement for the 
     binary_cross_entropy_with_logits function in PyTorch, that is, it can be used for models 
@@ -141,7 +142,14 @@ def single_channel_cross_entropy(
     # for BCE(x), cross_entropy((-x, 0)) must provide the same result
     input = torch.cat((-input, input_c1), dim=1)
 
-    return F.cross_entropy(input, target, weight=weight, ignore_index=ignore_index, reduction=reduction, label_smoothing=label_smoothing)
+    return F.cross_entropy(
+        input, 
+        target, 
+        weight=weight, 
+        ignore_index=ignore_index, 
+        reduction=reduction, 
+        label_smoothing=label_smoothing
+        )
 
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
     '''Weighted cross entropy. The probabilities for each pixel are weighted according to

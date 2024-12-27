@@ -1,6 +1,7 @@
 """Trivial models that can be used for testing purposes."""
 from torch import nn
 
+
 class TestClassification(nn.Module):
     """Classification model for testing purposes."""
 

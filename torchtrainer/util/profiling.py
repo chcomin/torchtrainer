@@ -1,12 +1,14 @@
 """Functions for benchmarking models and profiling memory usage."""
 
-import torch
-from torch.profiler import profile as pt_profile, ProfilerActivity
-from contextlib import nullcontext
 import copy
 import time
-import torch.nn as nn
+from contextlib import nullcontext
 from typing import Callable
+
+import torch
+import torch.nn as nn
+from torch.profiler import ProfilerActivity
+from torch.profiler import profile as pt_profile
 
 try:
     import fvcore.nn
@@ -15,21 +17,29 @@ except ModuleNotFoundError:
 else:
     HAS_FVCORE = True
 
-def profile_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool = True, call_backward: bool = False, 
-                  sort_by: str = 'cuda_time_total', device: str = 'cuda', use_float16: bool = False) -> str:
+def profile_model(
+        model: nn.Module, 
+        input_shape: tuple[int,...], 
+        no_grad: bool = True, 
+        call_backward: bool = False, 
+        sort_by: str = 'cuda_time_total', 
+        device: str = 'cuda', 
+        use_float16: bool = False
+        ) -> str:
     """
-    Profile model execution using the Pytorch profiler and prints the results on the screen. The model will be called 
-    as ``res = model(input).sum()``, with an optional call to res.backward().
+    Profile model execution using the Pytorch profiler and prints the results on the screen. 
+    The model will be called as ``res = model(input).sum()``, with an optional call 
+    to res.backward().
 
     Args:
         model: A Pytorch model.
         input_shape: size of the input to the model.
         no_grad: profile with torch.no_grad() context.
-        call_backward: profile with a call to .backward() from the result of the model. Must be False
-          if `no_grad=True`.
-        sort_by: how to order the results. Valid values are ``cpu_time``, ``cuda_time``, ``cpu_time_total``,
-                ``cuda_time_total``, ``cpu_memory_usage``, ``cuda_memory_usage``, ``self_cpu_memory_usage``, 
-                ``self_cuda_memory_usage``, ``count``.
+        call_backward: profile with a call to .backward() from the result of the model. 
+            Must be False if `no_grad=True`.
+        sort_by: how to order the results. Valid values are ``cpu_time``, ``cuda_time``, 
+            ``cpu_time_total``, ``cuda_time_total``, ``cpu_memory_usage``, ``cuda_memory_usage``, 
+            ``self_cpu_memory_usage``, ``self_cuda_memory_usage``, ``count``.
         device: device to profile. Can be ``cpu`` or ``cuda``.
         use_float16: set if half precision should be used for the forward pass.
 
@@ -46,10 +56,7 @@ def profile_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool =
     input = torch.rand(input_shape, device=device)
     model.to(device)
 
-    if no_grad:
-        cm = torch.no_grad()
-    else:
-        cm = nullcontext()
+    cm = torch.no_grad() if no_grad else nullcontext()
     
     # Do some warmup
     with cm:
@@ -73,7 +80,9 @@ def profile_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool =
             
     memory_allocated = final_memory - initial_memory
 
-    report_str = prof.key_averages(group_by_input_shape=True).table(sort_by=sort_by, top_level_events_only=True, max_name_column_width=20, max_shapes_column_width=40)
+    report_str = prof.key_averages(group_by_input_shape=True).table(
+        sort_by=sort_by, top_level_events_only=True, max_name_column_width=20, 
+        max_shapes_column_width=40)
     result = f'{report_str}\rGPU memory allocated: {memory_allocated/2**30} GiB'
     print(result)
 
@@ -99,28 +108,37 @@ def model_info(model: nn.Module, input_shape: tuple[int,...]) -> str:
 
     return result
     
-def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool = True, call_backward: bool = False, 
-                    device: str = 'cuda', use_float16: bool = False, return_model_info: bool = False) -> dict:
+def benchmark_model(
+        model: nn.Module, 
+        input_shape: tuple[int,...], 
+        no_grad: bool = True, 
+        call_backward: bool = False, 
+        device: str = 'cuda', 
+        use_float16: bool = False, 
+        return_model_info: bool = False
+        ) -> dict:
     
     """
-    Benchmark model execution and returns the results in a dictionary. The model will be called as ``res = model(input).sum()``, 
-    with an optional call to res.backward().
+    Benchmark model execution and returns the results in a dictionary. The model will be called as 
+    ``res = model(input).sum()``, with an optional call to res.backward().
 
     Args:
         model: A Pytorch model.
         input_shape: size of the input to the model.
         no_grad: profile with torch.no_grad() context.
-        call_backward: profile with a call to .backward() from the result of the model. Must be False
-          if `no_grad=True`.
+        call_backward: profile with a call to .backward() from the result of the model. 
+            Must be False if `no_grad=True`.
         device: device to profile. Can be ``cpu`` or ``cuda``.
         use_float16: set if half precision should be used for the forward pass.
-        return_model_info: if False, do not measure number of parameters, activations and flops, which takes some extra time.
+        return_model_info: if False, do not measure number of parameters, activations and flops, 
+            which takes some extra time.
 
     Returns:
         A dictionary containing:
           params: number of parameters in the model.
           activations: number of activations.
-          flops: estimation of the number of floating points operations. Only considers conv and linear layers
+          flops: estimation of the number of floating points operations. Only considers conv 
+            and linear layers
           memory: maximum GPU memory used by the model
           time_cpu: CPU time
           time_gpu: GPU time
@@ -133,10 +151,7 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
 
     if no_grad and call_backward:
         raise ValueError('Error, can only call backward if no_grad is False')
-    if device=='cpu':
-        dtype=torch.bfloat16
-    else:
-        dtype=torch.float16
+    dtype = torch.bfloat16 if device == 'cpu' else torch.float16
 
     if return_model_info and not HAS_FVCORE:
         print("The fvcore package is not installed. Unable to count flops and activations.")
@@ -146,10 +161,7 @@ def benchmark_model(model: nn.Module, input_shape: tuple[int,...], no_grad: bool
     input = torch.rand(input_shape, device=device)
     model.to(device)
 
-    if no_grad:
-        cm = torch.no_grad()
-    else:
-        cm = nullcontext()
+    cm = torch.no_grad() if no_grad else nullcontext()
 
     stats = {}
 
@@ -215,8 +227,8 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
     """
     Benchmark function execution and returns the results as a dictionary or as a string. 
 
-    *Note: the function is executed two times. The first execution is necessary as a warmup. Only the
-    second execution is benchmarked.
+    *Note: the function is executed two times. The first execution is necessary as a warmup. 
+    Only the second execution is benchmarked.
 
     Args:
         func: the function to benchmark.
@@ -225,8 +237,8 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
         func_params: tuple containing input parameters for executing the function.
 
     Returns:
-        If `profile=True`, returns a string containing the result of the Pytorch's profiler. If false,
-        returns a dictionary containing:
+        If `profile=True`, returns a string containing the result of the Pytorch's profiler. 
+        If false, returns a dictionary containing:
           memory: maximum GPU memory used by the model
           time_cpu: CPU time
           time_gpu: GPU time
@@ -266,7 +278,9 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
     time_cpu = (cpu_end - cpu_start)
 
     if profile:
-        report_str = cm.key_averages(group_by_input_shape=True).table(sort_by='cuda_time_total', top_level_events_only=True, max_name_column_width=20, max_shapes_column_width=40)
+        report_str = cm.key_averages(group_by_input_shape=True).table(
+            sort_by='cuda_time_total', top_level_events_only=True, max_name_column_width=20, 
+            max_shapes_column_width=40)
         stats = f'{report_str}\rGPU memory allocated: {memory_allocated/_GiB} GiB'
     else:
         stats = {
@@ -283,7 +297,11 @@ if __name__=='__main__':
     class Model(nn.Module):
         def __init__(self, num_layers=100, num_channels=16):
             super().__init__()
-            self.layers = nn.ModuleList([nn.Conv2d(1, num_channels, 3)] + [nn.Conv2d(num_channels, num_channels, 3) for _ in range(num_layers)] + [nn.Conv2d(num_channels, 2, 3)])
+            self.layers = nn.ModuleList(
+                [nn.Conv2d(1, num_channels, 3)]
+                + [nn.Conv2d(num_channels, num_channels, 3) for _ in range(num_layers)]
+                + [nn.Conv2d(num_channels, 2, 3)]
+            )
 
         def forward(self, x):
             for layer in self.layers:
@@ -293,23 +311,9 @@ if __name__=='__main__':
     model = Model(200, 4).to('cuda')
     input_shape = (1, 1, 1200, 1200)
 
-    '''profile_model(model, input_shape, no_grad=True, call_backward=False, device='cuda', use_float16=False)
-    print('\n\n')
-    profile_model(model, input_shape, no_grad=False, call_backward=True, device='cuda', use_float16=False)
-    print('\n\n')
-    profile_model(model, input_shape, no_grad=False, call_backward=True, device='cuda', use_float16=True)
-    print('\n\n')
-    model_info(model, input_shape)
-    print('\n\n')'''
-
-    '''stats = benchmark_model(model, input_shape, no_grad=True, call_backward=False, device='cuda', use_float16=False)
-    print(f'{stats}\n\n')'''
-    stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device='cuda', use_float16=False)
+    stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device='cuda',
+                            use_float16=False)
     print(f'{stats}\n\n')
-    '''stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device='cuda', use_float16=True)
-    print(f'{stats}\n\n')
-    stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device='cuda', use_float16=False, return_model_info=True)
-    print(f'{stats}\n\n')'''
 
 
     input = torch.rand(1, 1, 1200, 1200, device='cuda')

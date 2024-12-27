@@ -1,22 +1,22 @@
-import inspect
-import math
-import random
 import argparse
 import ast
+import contextlib
+import inspect
+import math
 import os
+import random
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import torch
 from IPython import display
 from PIL import Image
-import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
 
-try:
+with contextlib.suppress(ImportError):
     import wandb
-except ImportError:
-    pass
 
 class Logger:
     """ Class for logging metrics during training and validation. """
@@ -438,8 +438,8 @@ def setup_wandb(args, run_path):
         num_runs = 0
 
     if num_runs > 1:
-        print(f"Warning, more than one run with name {wandb_run_name} found in project {wandb_project}"
-                "in the wandb database. Deleting only the last run.")
+        print(f"Warning, more than one run with name {wandb_run_name} found in project "
+              "{wandb_project} in the wandb database. Deleting only the last run.")
     if num_runs >= 1:
         runs[-1].delete()   
 
@@ -457,8 +457,10 @@ def setup_wandb(args, run_path):
     )
 
 class CosineAnnealingWarmRestartsImp(lr_scheduler.CosineAnnealingWarmRestarts):
-    """Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for avoiding a large
-    learning rate at the very last step."""
+    """
+    Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for 
+    avoiding a large learning rate at the very last step.
+    """
     def __init__(self, optimizer, T_0, T_mult=1, eta_min=0, last_epoch=-1, verbose=False):
         super().__init__(optimizer, T_0, T_mult, eta_min, last_epoch, verbose)
 

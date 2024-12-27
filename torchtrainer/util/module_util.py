@@ -1,9 +1,10 @@
 """Utility functions and classes for working with Pytorch modules"""
 
-from collections import OrderedDict
 import copy
-from torch import nn
+from collections import OrderedDict
+
 import torch
+from torch import nn
 
 bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
@@ -49,7 +50,8 @@ class Hook:
 
     Args:
         module (torch.nn.Module): Pytorch module
-        detach (bool, optional): If True, detaches the activation from the computation graph. Defaults to True.
+        detach (bool, optional): If True, detaches the activation from the computation graph. 
+            Defaults to True.
     """
     def __init__(self, module, detach=True):
         self.detach = detach
@@ -70,8 +72,8 @@ class Hook:
     def __del__(self): self.remove()
 
 class ReceptiveField:
-    """Calculate the receptive field of a pixel in the activation map of a neural network layer. Example
-    usage:
+    """Calculate the receptive field of a pixel in the activation map of a neural network layer. 
+    Example usage:
 
     receptive_field = ReceptiveField(model)
     rf = receptive_field.receptive_field(module_name)
@@ -107,35 +109,6 @@ class ReceptiveField:
 
         model.to(self.device)
         model.eval()
-
-        # Get names of modules containing parameters or buffers
-        '''modules_with_params = set()
-        for name, _ in model.named_parameters():
-            mod_name = '.'.join(name.split('.')[:-1])
-            modules_with_params.add(mod_name)
-
-        for name, _ in model.named_buffers():
-            mod_name = '.'.join(name.split('.')[:-1])
-            modules_with_params.add(mod_name)'''
-        
-        '''with torch.no_grad():
-            for name, module in model.named_modules():
-                if isinstance(module, self.conv_layers):
-                    # Set filters to 1/num_vals_filter. 
-                    n = module.weight[0].numel()
-                    module.weight[:] = 1./n
-                    if module.bias is not None:
-                        module.bias[:] = 0.
-                #if isinstance(module, nn.ReLU):
-                #    module.inplace = False
-                elif isinstance(module, self.conv_transp_layers):
-                    shape = module.weight
-                    stride = module.stride
-                    # Effective number of input features is ks//stride for each spatial dimension, times the number of input channels
-                    n = shape[0]*int(torch.prod(torch.tensor(shape[2:])//torch.tensor(stride)))
-                    module.weight[:] = 1./n
-                    if module.bias is not None:
-                        module.bias[:] = 0.'''
 
         with torch.no_grad():
             for name, module in model.named_modules():
@@ -198,7 +171,9 @@ class ReceptiveField:
         # Attach hook to get activation
         hook = Hook(module, False)
 
-        x = torch.ones(1, num_channels, img_size[0], img_size[1], requires_grad=True, device=self.device)
+        x = torch.ones(
+            1, num_channels, img_size[0], img_size[1], requires_grad=True, device=self.device
+        )
         _ = model(x)
 
         act = hook.activation
@@ -220,7 +195,8 @@ class ReceptiveField:
 
         return rf
 
-    def receptive_field_bbox(self, module_name, num_channels=1, img_size=(512, 512), pixel=None, eps=1e-8):
+    def receptive_field_bbox(self, module_name, num_channels=1, img_size=(512, 512), pixel=None, 
+                             eps=1e-8):
         """Returns the bounding box and center of the receptive field."""
 
         rf = self.receptive_field(module_name, num_channels, img_size, pixel)
@@ -240,7 +216,8 @@ class ReceptiveField:
         #    bbox_center = bbox[0]+(bbox[2]-bbox[0])//2, bbox[1]+(bbox[3]-bbox[1])//2
         ##    if bbox_center!=center:
         #    if abs(center[0]-bbox_center[0])>1 or abs(center[1]-bbox_center[1])>1:
-        #        print(f'Warning, the position of the maximum of the receptive field ({center}) is not equal to its center ({bbox_center}).')
+        #        print(f'Warning, the position of the maximum of the receptive field ({center}) is '
+        #              'not equal to its center ({bbox_center}).')
         #        print(bbox, inds)
 
         return bbox, center
@@ -373,7 +350,7 @@ def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
     """Set requires_grad to `req_grad` for all parameters in `module_groups`.
     If `keep_bn` is True, batchnorm layers are not changed."""
 
-    for idx, group in enumerate(module_groups):
+    for group in module_groups:
         for module in group:
             for p in module.parameters(recurse=False):
                 if not keep_bn or not isinstance(module, bn_types): 

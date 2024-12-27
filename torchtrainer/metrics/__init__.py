@@ -1,11 +1,9 @@
-from .confusion_metrics import (
-    ConfusionMatrixMetrics, 
-    AveragePrecisionScore,
-    BalancedAccuracyScore,
-    MathewsCorrcoef,
-    PrecisionRecallCurve,
-    ROCAUCScore,
-    ROCCurve
-)
-from .topology_metrics import ClDice
-from .distance_metrics import DistanceMetrics
+from .confusion_metrics import AveragePrecisionScore as AveragePrecisionScore
+from .confusion_metrics import BalancedAccuracyScore as BalancedAccuracyScore
+from .confusion_metrics import ConfusionMatrixMetrics as ConfusionMatrixMetrics
+from .confusion_metrics import MathewsCorrcoef as MathewsCorrcoef
+from .confusion_metrics import PrecisionRecallCurve as PrecisionRecallCurve
+from .confusion_metrics import ROCAUCScore as ROCAUCScore
+from .confusion_metrics import ROCCurve as ROCCurve
+from .distance_metrics import DistanceMetrics as DistanceMetrics
+from .topology_metrics import ClDice as ClDice

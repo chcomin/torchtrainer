@@ -1,5 +1,6 @@
-from sklearn import metrics
 import torch
+from sklearn import metrics
+
 from ..util.post_processing import logits_to_preds
 
 # Alias just to remind that tensors can be on CPU or GPU
@@ -83,7 +84,8 @@ class AveragePrecisionScore:
         preds = logits_to_preds(scores, task=self.task)
         y_score, y_true = to_sklearn(preds, targets, self.ignore_index)
 
-        return metrics.average_precision_score(y_true, y_score, average=self.average, sample_weight=self.sample_weight)
+        return metrics.average_precision_score(
+            y_true, y_score, average=self.average, sample_weight=self.sample_weight)
 
 class BalancedAccuracyScore:
     """Calculate the balanced accuracy score for a batch of data.
@@ -115,7 +117,8 @@ class BalancedAccuracyScore:
             targets: CpuOrCudaTensor
             ) -> float:
 
-        preds = logits_to_preds(scores, task="binary", return_indices=True, threshold=self.threshold)
+        preds = logits_to_preds(
+            scores, task="binary", return_indices=True, threshold=self.threshold)
         y_pred, y_true = to_sklearn(preds, targets, self.ignore_index)
 
         return metrics.balanced_accuracy_score(y_true, y_pred, sample_weight=self.sample_weight)
@@ -150,7 +153,8 @@ class MathewsCorrcoef:
             targets: CpuOrCudaTensor
             ) -> float:
 
-        preds = logits_to_preds(scores, task="binary", return_indices=True, threshold=self.threshold)
+        preds = logits_to_preds(
+            scores, task="binary", return_indices=True, threshold=self.threshold)
         y_pred, y_true = to_sklearn(preds, targets, self.ignore_index)
 
         return metrics.matthews_corrcoef(y_true, y_pred, sample_weight=self.sample_weight)
@@ -197,7 +201,9 @@ class PrecisionRecallCurve:
         y_score, y_true = to_sklearn(preds, targets, self.ignore_index)
 
         return metrics.precision_recall_curve(
-            y_true, y_score, sample_weight=self.sample_weight, drop_intermediate=self.drop_intermediate)
+            y_true, y_score, sample_weight=self.sample_weight, 
+            drop_intermediate=self.drop_intermediate
+            )
 
 class ROCAUCScore:
     """
@@ -292,7 +298,9 @@ class ROCCurve:
         y_score, y_true = to_sklearn(preds, targets, self.ignore_index)
 
         return metrics.roc_curve(
-            y_true, y_score, sample_weight=self.sample_weight, drop_intermediate=self.drop_intermediate)
+            y_true, y_score, sample_weight=self.sample_weight, 
+            drop_intermediate=self.drop_intermediate
+            )
 
 class WeightedAverage:
     '''Create exponentially weighted moving average.'''
@@ -409,7 +417,6 @@ def confusion_matrix_elements(
     p = targets.sum()
     n = (~targets).sum()
     pp = preds.sum()
-    pn = (~preds).sum()
 
     tp = (targets & preds).sum()
     tn = (~targets & ~preds).sum()
@@ -494,7 +501,9 @@ def to_sklearn(
     if preds.shape==targets.shape:
         is_multilabel = True
         if targets.max()>1:
-            raise ValueError("Multilabel classification requires targets to be an indicator matrix.")
+            raise ValueError(
+                "Multilabel classification requires targets to be an indicator matrix."
+                )
 
     batch_shape = (preds.shape[0], *preds.shape[2:])
     if not is_multilabel and targets.shape!=batch_shape:

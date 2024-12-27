@@ -1,18 +1,29 @@
-from pathlib import Path
-import shutil
 import argparse
-from datetime import datetime
 import operator
-import yaml
-from tqdm.auto import tqdm
+import shutil
+from datetime import datetime
+from pathlib import Path
+
 import torch
-from torch import nn
 import torch.utils
+import yaml
+from torch import nn
 from torch.utils.data import DataLoader
-from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
-from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_imgs
-from torchtrainer.util.train_util import ParseKwargs, ParseText, setup_wandb
+from tqdm.auto import tqdm
+
 from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics
+from torchtrainer.util.train_util import (
+    Logger,
+    LoggerPlotter,
+    ParseKwargs,
+    ParseText,
+    WrapDict,
+    dict_to_argv,
+    predict_and_save_val_imgs,
+    seed_all,
+    seed_worker,
+    setup_wandb,
+)
 
 try:
     import wandb
@@ -76,7 +87,7 @@ class DefaultModuleRunner:
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
             self.optim.zero_grad()
-            with torch.autocast(device_type=self.device, enabled=scaler.is_enabled()):    # Forward pass in mixed precision
+            with torch.autocast(device_type=self.device, enabled=scaler.is_enabled()):
                 scores = self.model(imgs)
                 loss = self.loss_func(scores, targets)
             
@@ -199,7 +210,8 @@ class DefaultTrainer:
         experiment_path = Path(experiments_path)/experiment_name
         run_path = experiment_path/run_name
         if Path.exists(run_path):
-            run_name_new = input('Run path already exists. Press enter to overwrite or write the name of the run: ')
+            run_name_new = input('Run path already exists. Press enter to overwrite or write '
+                                 'the name of the run: ')
             if run_name_new.strip():
                 run_path = experiment_path/run_name_new
                 args.run_name = run_name_new
@@ -223,7 +235,8 @@ class DefaultTrainer:
 
         # Save the config file
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
-        open(run_path/'config.yaml', 'w').write(args_yaml)
+        with open(run_path/'config.yaml', 'w') as file:
+            file.write(args_yaml)
 
         # Setup wandb
         if args.log_wandb:
@@ -329,14 +342,14 @@ class DefaultTrainer:
         elif loss_function=='single_channel_cross_entropy':
             from torchtrainer.metrics.losses import SingleChannelCrossEntropyLoss
 
-            loss_func = SingleChannelCrossEntropyLoss(torch.tensor(class_weights, device=args.device), 
-                                            ignore_index=ignore_index)
+            loss_func = SingleChannelCrossEntropyLoss(
+                torch.tensor(class_weights, device=args.device), ignore_index=ignore_index)
         elif loss_function=='bce':
             if ignore_index!=-100:
-                # TODO: fix: If the dataset uses -100 as ignore_index, this message is not shown
+                # TODO: fix:If the dataset uses -100 as ignore_index, this message is not shown
                 raise ValueError('The BCE loss does not support ignore_index')
-            # We use class_weights[1]/class_weights[0] for class 1 because the weight of class 0
-            # in BCE is always 1
+            # We use class_weights[1]/class_weights[0] for class 1 because the weight of 
+            # class 0 in BCE is always 1
             loss_func = nn.BCEWithLogitsLoss(pos_weight=class_weights[1]/class_weights[0])
         else:
             raise ValueError(f'Loss function {loss_function} not recognized')
@@ -362,7 +375,8 @@ class DefaultTrainer:
             ds_train, ds_valid, num_classes, num_channels, 
             collate_fn, loss_func, perf_funcs, logger, logger_plotter)
 
-    def get_model(self, model_class, weights_strategy, num_classes, num_channels, **model_params):
+    def get_model(self, model_class, weights_strategy, num_classes, num_channels, 
+                  **model_params):
         """This method receives model parameters received from the command line
         and returns the model.
 
@@ -404,14 +418,16 @@ class DefaultTrainer:
 
         elif model_class=='unet_custom':
             from torchtrainer.models.unet_custom import get_model
-            model = get_model(num_channels=num_channels, num_classes=num_classes, **model_params)
+            model = get_model(num_channels=num_channels, num_classes=num_classes, 
+                              **model_params)
 
         elif model_class=='test_model':
             from torchtrainer.models.testing import TestSegmentation
             model = TestSegmentation(num_channels=num_channels, num_classes=num_classes)
 
         else:
-            model = self.get_model(model_class, weights_strategy, num_classes, num_channels, **model_params)
+            model = self.get_model(model_class, weights_strategy, num_classes, num_channels, 
+                                   **model_params)
                 
         self.module_runner.add_model_elements(model)
         
@@ -467,18 +483,23 @@ class DefaultTrainer:
         try:
             model(batch[0].to(device))
         except Exception as e:
-            print("The following error happened when applying the model to the validation batch:")
+            print(
+                "The following error happened when applying the model to the validation batch:"
+            )
             raise e
         
         if optimizer=='sgd':
-            optim = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
-                                    momentum=momentum)
+            optim = torch.optim.SGD(
+                model.parameters(), lr=args.lr, weight_decay=args.weight_decay, 
+                momentum=momentum)
         elif optimizer=='adam':
-            optim = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
-                                    betas=(momentum, 0.999))
+            optim = torch.optim.Adam(
+                model.parameters(), lr=args.lr, weight_decay=args.weight_decay, 
+                betas=(momentum, 0.999))
         elif optimizer=='adamw':
-            optim = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
-                                    betas=(momentum, 0.999))
+            optim = torch.optim.AdamW(
+                model.parameters(), lr=args.lr, weight_decay=args.weight_decay,
+                betas=(momentum, 0.999))
         
         scheduler = torch.optim.lr_scheduler.PolynomialLR(optim, num_epochs, args.lr_decay)
 
@@ -551,7 +572,9 @@ class DefaultTrainer:
 
                 if validate:
                     if args.save_val_imgs:
-                        predict_and_save_val_imgs(module_runner, epoch, args.val_img_indices, run_path)                  
+                        predict_and_save_val_imgs(
+                            module_runner, epoch, args.val_img_indices, run_path
+                        )
 
                     # Check for model improvement
                     val_metric = last_metrics[val_metric_name]
@@ -580,7 +603,8 @@ class DefaultTrainer:
         timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         config_dict['timestamp_end'] = timestamp
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
-        open(run_path/'config.yaml', 'w').write(args_yaml)
+        with open(run_path/'config.yaml', 'w') as file: 
+            file.write(args_yaml)
 
         return module_runner
 
@@ -610,7 +634,7 @@ class DefaultTrainer:
         # the values for the main parser
         args_config, remaining = config_parser.parse_known_args(sys_argv)
         if args_config.config:
-            with open(args_config.config, 'r') as f:
+            with open(args_config.config) as f:
                 cfg = yaml.safe_load(f)
                 parser.set_defaults(**cfg)
 
@@ -623,76 +647,117 @@ class DefaultTrainer:
     def get_parser(self) -> argparse.ArgumentParser:
 
         # The config_parser parses only the --config argument, this argument is used to
-        # load a yaml file containing key-values that override the defaults for the main parser below
+        # load a yaml file containing key-values that override the defaults for the main parser
+        # below
         config_parser = argparse.ArgumentParser(description='Training Config', add_help=False)
-        config_parser.add_argument('--config', default='', metavar='FILE',
-                            help='Path to YAML config file specifying default arguments')
+        config_parser.add_argument('--config', default='', metavar='FILE', 
+            help='Path to YAML config file specifying default arguments')
 
-        parser = argparse.ArgumentParser(description='Below, N represents integer values and V represents float values')
+        parser = argparse.ArgumentParser(
+            description='Below, N represents integer values and V represents float values')
 
         # Logging parameters
         group = parser.add_argument_group('Logging parameters')
-        group.add_argument('-p', '--experiments_path', default='experiments', metavar='PATH', help='Path to save experiments data')
-        group.add_argument('-e', '--experiment_name', default='no_name_experiment', metavar='NAME', help='Name of the experiment')
-        group.add_argument('-n', '--run_name', default='no_name_run', metavar='NAME', help='Name of the run for a given experiment')
-        group.add_argument('--validate_every', type=int, default=1, metavar='N', help='Run a validation step every N epochs')
-        group.add_argument('--save_val_imgs', action='store_true', help='Save some validation images when validating')
-        group.add_argument('--val_img_indices', nargs='*', type=int, default=(0,), metavar='N N N', help='Indices of the validation images to save')
+        group.add_argument('-p', '--experiments_path', default='experiments', metavar='PATH', 
+                           help='Path to save experiments data')
+        group.add_argument('-e', '--experiment_name', default='no_name_experiment', 
+                           metavar='NAME', help='Name of the experiment')
+        group.add_argument('-n', '--run_name', default='no_name_run', metavar='NAME', 
+                           help='Name of the run for a given experiment')
+        group.add_argument('--validate_every', type=int, default=1, metavar='N', 
+                           help='Run a validation step every N epochs')
+        group.add_argument('--save_val_imgs', action='store_true', 
+                           help='Save some validation images when validating')
+        group.add_argument('--val_img_indices', nargs='*', type=int, default=(0,), 
+                           metavar='N N N', help='Indices of the validation images to save')
         group.add_argument('--copy_model_every', type=int, default=0, metavar='N', 
-                           help='Save a copy of the model every N epochs. If 0 (default) no copies are saved')
-        group.add_argument('--log_wandb', action='store_true', help='If wandb should also be used for logging. Please make sure that you'
-                           'login to wandb by running "wandb login" in the terminal.') 
-        group.add_argument('--wandb_project', default='uncategorized', help='Name of the wandb project to log the data.')
-        parser.add_argument('--meta', default='', nargs='*', action=ParseText, help='Additional metadata to save in the config.json file '
-                            'describing the experiment. Whitespaces do not need to be escaped.')
+                           help='Save a copy of the model every N epochs. If 0 (default) no '
+                           'copies are saved')
+        group.add_argument('--log_wandb', action='store_true', 
+                           help='If wandb should also be used for logging. Please make sure that '
+                                'you login to wandb by running "wandb login" in the terminal.') 
+        group.add_argument('--wandb_project', default='uncategorized', 
+                           help='Name of the wandb project to log the data.')
+        parser.add_argument('--meta', default='', nargs='*', action=ParseText, 
+                            help='Additional metadata to save in the config.json file describing '
+                                 'the experiment. Whitespaces do not need to be escaped.')
 
         # Dataset parameters
         group = parser.add_argument_group('Dataset parameters')
         group.add_argument('dataset_path', help='Path to the dataset root directory')        
         group.add_argument('dataset_class', help='Name of the dataset class to use')
         group.add_argument('--split_strategy', default='0.2',  metavar='STRING',
-                        help='How to split the data into train/val. This parameter can be any string that is then passed to the dataset creation function')
+                           help='How to split the data into train/val. This parameter can be any '
+                                'string that is then passed to the dataset creation function')
         group.add_argument('--augmentation_strategy', default=None, metavar='STRING', 
-                           help='Data augmentation procedure. Can be any string and is passed to the dataset creation function')
-        group.add_argument('--resize_size', default=(384,384), nargs=2, type=int, metavar=('N', 'N'), help='Size to resize the images. E.g. --resize_size 128 128')
-        group.add_argument('--dataset_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                        help='Additional parameters to pass to the dataset creation function. E.g. --dataset_params par1=v1 par2=v2 par3=v3. '
-                        'The additional parameters are evaluated as Python code and cannot contain spaces.')
-        group.add_argument('--loss_function', default='cross_entropy', metavar='LOSS', help='Loss function to use during training')
-        group.add_argument('--ignore_class_weights', action='store_true', help='If provided, ignore class weights for the loss function')
+                           help='Data augmentation procedure. Can be any string and is passed to '
+                                'the dataset creation function')
+        group.add_argument('--resize_size', default=(384,384), nargs=2, type=int, 
+                           metavar=('N', 'N'), 
+                           help='Size to resize the images. E.g. --resize_size 128 128')
+        group.add_argument(
+            '--dataset_params', nargs='*', default={}, action=ParseKwargs, 
+            metavar='par1=v1 par2=v2 par3=v3', 
+            help='Additional parameters to pass to the dataset creation function. '
+                 'E.g. --dataset_params par1=v1 par2=v2 par3=v3. The additional parameters are '
+                 'evaluated as Python code and cannot contain spaces.')
+        group.add_argument('--loss_function', default='cross_entropy', metavar='LOSS', 
+                           help='Loss function to use during training')
+        group.add_argument('--ignore_class_weights', action='store_true', 
+                           help='If provided, ignore class weights for the loss function')
 
         # Model parameters
         group = parser.add_argument_group('Model parameters')
         group.add_argument('model_class', help='Name of the model to train')
         group.add_argument('--weights_strategy', default=None, metavar='STRING', 
-            help='This argument is sent to the model creation function and can be used to define how to load the weights')
-        group.add_argument('--model_params', nargs='*', default={}, action=ParseKwargs, metavar='par1=v1 par2=v2 par3=v3', 
-                        help='Additional parameters to pass to the model creation function. E.g. --model_params par1=v1 par2=v2 par3=v3')
+                           help='This argument is sent to the model creation function and can be '
+                                'used to define how to load the weights')
+        group.add_argument('--model_params', nargs='*', default={}, action=ParseKwargs, 
+                           metavar='par1=v1 par2=v2 par3=v3', 
+                           help='Additional parameters to pass to the model creation function. '
+                                'E.g. --model_params par1=v1 par2=v2 par3=v3')
 
         # Training parameters
         group = parser.add_argument_group('Training parameters')
-        group.add_argument('--num_epochs', type=int, default=2, metavar='N', help='Number of training epochs')
-        group.add_argument('--validation_metric', default='Validation loss', nargs='*', metavar='METRIC', action=ParseText, help='Which metric to use for early stopping')
-        group.add_argument('--patience', type=int, default=None, metavar='N', help='Finish training if the validation metric does not improve for N validation steps'
-                           'If not provided, this functionality is disabled.')
+        group.add_argument('--num_epochs', type=int, default=2, metavar='N', 
+                           help='Number of training epochs')
+        group.add_argument('--validation_metric', default='Validation loss', nargs='*', 
+                           metavar='METRIC', action=ParseText, 
+                           help='Which metric to use for early stopping')
+        group.add_argument('--patience', type=int, default=None, metavar='N', 
+                           help='Finish training if the validation metric does not improve for N '
+                           'validation steps. If not provided, this functionality is disabled.')
         group.add_argument('--maximize_validation_metric', action='store_true', 
-                           help='If set, early stopping will maximize the validation metric instead of minimizing')
-        group.add_argument('--lr', type=float, default=0.01, metavar='V', help='Initial learning rate')
-        group.add_argument('--lr_decay', type=float, default=1., metavar='V', help='Learning rate decay')
-        group.add_argument('--bs_train', type=int, default=32, metavar='N', help='Batch size used durig training')
-        group.add_argument('--bs_valid', type=int, default=8, metavar='N', help='Batch size used durig validation')
-        group.add_argument('--weight_decay', type=float, default=1e-4, metavar='V', help='Weight decay for the optimizer')
+                           help='If set, early stopping will maximize the validation metric instead'
+                                ' of minimizing')
+        group.add_argument('--lr', type=float, default=0.01, metavar='V', 
+                           help='Initial learning rate')
+        group.add_argument('--lr_decay', type=float, default=1., metavar='V', 
+                           help='Learning rate decay')
+        group.add_argument('--bs_train', type=int, default=32, metavar='N', 
+                           help='Batch size used durig training')
+        group.add_argument('--bs_valid', type=int, default=8, metavar='N', 
+                           help='Batch size used durig validation')
+        group.add_argument('--weight_decay', type=float, default=1e-4, metavar='V', 
+                           help='Weight decay for the optimizer')
         group.add_argument('--optimizer', default='sgd', help='Optimizer to use')
-        group.add_argument('--momentum', type=float, default=0.9, metavar='V', help='Momentum/beta1 of the optimizer')
-        group.add_argument('--seed', type=int, default=0, metavar='N', help='Seed for the random number generator')
+        group.add_argument('--momentum', type=float, default=0.9, metavar='V', 
+                           help='Momentum/beta1 of the optimizer')
+        group.add_argument('--seed', type=int, default=0, metavar='N', 
+                           help='Seed for the random number generator')
 
         # Device and efficiency parameters
         group = parser.add_argument_group('Device and efficiency parameters')
-        group.add_argument('--device', default='cuda:0', help='where to run the training code (e.g. "cpu" or "cuda:0")')
-        group.add_argument('--num_workers', type=int, default=5, metavar='N', help='Number of workers for the DataLoader')
-        group.add_argument('--use_amp', action='store_true', help='If automatic mixed precision should be used')
-        group.add_argument('--deterministic', action='store_true', help='If deterministic algorithms should be used')
-        group.add_argument('--benchmark', action='store_true', help='If cuda benchmark should be used')
+        group.add_argument('--device', default='cuda:0', 
+                           help='where to run the training code (e.g. "cpu" or "cuda:0")')
+        group.add_argument('--num_workers', type=int, default=5, metavar='N', 
+                           help='Number of workers for the DataLoader')
+        group.add_argument('--use_amp', action='store_true', 
+                           help='If automatic mixed precision should be used')
+        group.add_argument('--deterministic', action='store_true', 
+                           help='If deterministic algorithms should be used')
+        group.add_argument('--benchmark', action='store_true', 
+                           help='If cuda benchmark should be used')
 
         return parser, config_parser
 

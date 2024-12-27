@@ -1,7 +1,9 @@
 import random
-from skimage import draw
+
 import torch
+from skimage import draw
 from torch.utils.data import Dataset
+
 
 class FakeClassificationData(Dataset):
     """Dataset that returns a circle or disk image. Used for testing purposes."""

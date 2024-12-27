@@ -1,8 +1,10 @@
 # A simple encoder decoder architecture that accepts any Pytorch resnet model
 from pathlib import Path
+
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
+
 
 def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
 
@@ -18,9 +20,11 @@ def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
 
 class DecoderBlock(nn.Module):
     """
-    Receives the activation from the previous level of the decoder `x_dec` and the activation from the encoder `x_enc`. 
-    It is assumed that `x_dec` has a smaller spatial resolution than `x_enc` and that `x_enc` has a different number of channels than `x_dec`.
-    The module adjusts the resolution of `x_dec` to be equal to `x_enc` and the number of channels of `x_enc` to be equal to `x_dec`.
+    Receives the activation from the previous level of the decoder `x_dec` and the activation from 
+    the encoder `x_enc`. It is assumed that `x_dec` has a smaller spatial resolution than `x_enc` 
+    and that `x_enc` has a different number of channels than `x_dec`. The module adjusts the 
+    resolution of `x_dec` to be equal to `x_enc` and the number of channels of `x_enc` to be equal 
+    to `x_dec`.
 
     Args:
         enc_channels: Number of channels of the encoder features.

@@ -3,12 +3,15 @@ images from the respective datasets."""
 
 import os
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable
+
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
+
 from ..util.data_util import search_files
+
 
 class RetinaDataset(Dataset):
     """Create a dataset object for holding a typical retina blood vessel dataset. 
@@ -96,7 +99,7 @@ class RetinaDataset(Dataset):
         self.classes = ["background", "vessel"]
         self.transforms = transforms
 
-    def __getitem__(self, idx: int) -> Tuple:
+    def __getitem__(self, idx: int) -> tuple:
         
         image = Image.open(self.images[idx])
         label = np.array(Image.open(self.labels[idx]), dtype=int)
@@ -162,7 +165,7 @@ class DRIVE(RetinaDataset):
 
     _HAS_TEST = True
     
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
+    def _get_files(self, split: str) -> tuple[list, list, list]:
 
         if split=="train":
             root_split = self.root/"training"
@@ -202,7 +205,7 @@ class CHASEDB1(RetinaDataset):
 
     _HAS_TEST = False
     
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
+    def _get_files(self, split: str) -> tuple[list, list, list]:
 
         root_imgs = self.root/"images"
         root_labels = self.root/"labels"
@@ -235,7 +238,7 @@ class STARE(RetinaDataset):
 
     _HAS_TEST = False
     
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
+    def _get_files(self, split: str) -> tuple[list, list, list]:
 
         root_imgs = self.root/"images"
         root_labels = self.root/"labels"
@@ -268,7 +271,7 @@ class HRF(RetinaDataset):
 
     _HAS_TEST = False
     
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
+    def _get_files(self, split: str) -> tuple[list, list, list]:
 
         root_imgs = self.root/"images"
         root_labels = self.root/"labels"
@@ -304,7 +307,7 @@ class FIVES(RetinaDataset):
 
     _HAS_TEST = True
     
-    def _get_files(self, split: str) -> Tuple[list, list, list]:
+    def _get_files(self, split: str) -> tuple[list, list, list]:
 
         if split=="train":
             root_split = self.root/"train"
@@ -369,7 +372,7 @@ class VessMAP(Dataset):
         self.classes = ["background", "vessel"]
         self.transforms = transforms
 
-    def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
+    def __getitem__(self, idx: int) -> tuple[NDArray, NDArray]:
             
         image = np.array(Image.open(self.images[idx]))
         label = np.array(Image.open(self.labels[idx]), dtype=int)
@@ -389,7 +392,7 @@ class VessMAP(Dataset):
     def __len__(self) -> int:
         return len(self.images)
     
-    def _get_files(self) -> Tuple[list, list]:
+    def _get_files(self) -> tuple[list, list]:
 
         root_imgs = self.root/"images"
         root_labels = self.root/"annotator1"/"labels"
@@ -446,7 +449,7 @@ class CORTEX(Dataset):
         self.classes = ["background", "vessel"]
         self.transforms = transforms
 
-    def __getitem__(self, idx: int) -> Tuple[NDArray, NDArray]:
+    def __getitem__(self, idx: int) -> tuple[NDArray, NDArray]:
             
         image = np.array(Image.open(self.images[idx]))
         label = np.array(Image.open(self.labels[idx]), dtype=int)
@@ -466,7 +469,7 @@ class CORTEX(Dataset):
     def __len__(self) -> int:
         return len(self.images)
     
-    def _get_files(self) -> Tuple[list, list]:
+    def _get_files(self) -> tuple[list, list]:
 
         root_imgs = self.root/"images"
         root_labels = self.root/"labels"

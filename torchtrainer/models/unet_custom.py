@@ -1,20 +1,25 @@
 """U-Net architecture made by Prof. Cesar Comin"""
 
 from pathlib import Path
+
 import torch
 from torch import nn
-from .layers import BasicBlock, Upsample, Concat, conv3x3, conv1x1
+
 from ..util.module_util import Hook
+from .layers import BasicBlock, Concat, Upsample, conv1x1, conv3x3
+
 
 class UNetCustom(nn.Module):
-    """U-Net with residual blocks. Please see the Models notebook for an in-depth explanation of the parameters.
+    """U-Net with residual blocks. Please see the Models notebook for an in-depth explanation of 
+    the parameters.
     
     Parameters
     ----------
     blocks_per_encoder_stage : list
         Number of residual blocks for each stage of the encoder.
     blocks_per_decoder_stage : list
-        Number of residual blocks for each stage of the decoder. Must have the same size as blocks_per_encoder_stage`.
+        Number of residual blocks for each stage of the decoder. Must have the same size as 
+        blocks_per_encoder_stage`.
     channels_per_stage : list
         Number of channels of each stage. Must have the same size as blocks_per_encoder_stage`.
     num_channels : int
@@ -22,45 +27,69 @@ class UNetCustom(nn.Module):
     num_classes : int
         Number of classes for the output.
     zero_init_residual : bool
-        If True, initializes each residual block so that the non-residual path outputs 0. That is, at the beginning,
-        the residual block acts as an identity layer.
+        If True, initializes each residual block so that the non-residual path outputs 0. 
+        That is, at the beginning, the residual block acts as an identity layer.
     """
 
-    def __init__(self, blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels=1, num_classes=2, upsample_strategy='interpolation', zero_init_residual=False):
+    def __init__(
+            self, 
+            blocks_per_encoder_stage, 
+            blocks_per_decoder_stage, 
+            channels_per_stage, 
+            num_channels=1, 
+            num_classes=2, 
+            upsample_strategy='interpolation', 
+            zero_init_residual=False
+            ):
         super().__init__()
 
         num_stages = len(blocks_per_encoder_stage)
         if num_stages!=len(blocks_per_decoder_stage):
-            raise ValueError("Length of `blocks_per_encoder_stage` and `blocks_per_decoder_stage` must be equal.")
+            raise ValueError("Length of `blocks_per_encoder_stage` and `blocks_per_decoder_stage` "
+                             "must be equal.")
         if num_stages!=len(channels_per_stage):
-            raise ValueError("Length of `blocks_per_encoder_stage` and `channels_per_stage` must be equal.")
+            raise ValueError("Length of `blocks_per_encoder_stage` and `channels_per_stage` must "
+                             "be equal.")
 
         self.norm_layer = nn.BatchNorm2d
         self.residual_block = BasicBlock
         self.upsample_strategy = upsample_strategy
         
         self.stage_input = nn.Sequential(
-            nn.Conv2d(num_channels, channels_per_stage[0], kernel_size=7, stride=1, padding=3, bias=False),
+            nn.Conv2d(
+                num_channels, channels_per_stage[0], kernel_size=7, stride=1, padding=3, bias=False
+                ),
             self.norm_layer(channels_per_stage[0], momentum=0.1),
             nn.ReLU(inplace=True),
         )
 
-        #Encoder stages. Each stage involves a downsample and a change to the number of channels at the beggining,
-        #followed by blocks_per_encoder_stage[i] residual blocks. The only exception is the first stage that downsamples but does not
-        #change the number of channels.
-        stages = [('stage_0', self._make_down_stage(channels_per_stage[0], channels_per_stage[0], blocks_per_encoder_stage[0], stride=2))]
+        # Encoder stages. Each stage involves a downsample and a change to the number of channels 
+        # at the beggining, followed by blocks_per_encoder_stage[i] residual blocks. The only 
+        # exception is the first stage that downsamples but does not change the number of channels.
+        stages = [('stage_0', self._make_down_stage(channels_per_stage[0], 
+                                                    channels_per_stage[0], 
+                                                    blocks_per_encoder_stage[0], 
+                                                    stride=2))]
         for idx in range(num_stages-1):
-            stages.append((f'stage_{idx+1}', self._make_down_stage(channels_per_stage[idx], channels_per_stage[idx+1], blocks_per_encoder_stage[idx+1], stride=2)))
+            stages.append((f'stage_{idx+1}', self._make_down_stage(channels_per_stage[idx], 
+                                                                   channels_per_stage[idx+1], 
+                                                                   blocks_per_encoder_stage[idx+1], 
+                                                                   stride=2)))
 
         self.encoder = nn.ModuleDict(stages)
 
-        #Decoder stages. Each stage involves an upsample and a change to the number of channels at the beggining. The
-        #upsampled activation is concatenated with the respective activation of the encoder and the number of channels
-        # is halved. The last stage upsamples but do not changes the number of channels.
+        # Decoder stages. Each stage involves an upsample and a change to the number of channels at 
+        # the beggining. The upsampled activation is concatenated with the respective activation 
+        # of the encoder and the number of channels is halved. The last stage upsamples but do not 
+        # changes the number of channels.
         stages = []
         for idx in range(num_stages-1, 0, -1):
-            stages.append((f'stage_{idx}',self._make_up_stage(channels_per_stage[idx], channels_per_stage[idx-1], blocks_per_decoder_stage[idx])))
-        stages.append((f'stage_{0}', self._make_up_stage(channels_per_stage[0], channels_per_stage[0], blocks_per_decoder_stage[0])))
+            stages.append((f'stage_{idx}',self._make_up_stage(channels_per_stage[idx], 
+                                                              channels_per_stage[idx-1], 
+                                                              blocks_per_decoder_stage[idx])))
+        stages.append((f'stage_{0}', self._make_up_stage(channels_per_stage[0], 
+                                                         channels_per_stage[0], 
+                                                         blocks_per_decoder_stage[0])))
 
         self.decoder = nn.ModuleDict(stages)
         self.conv_output = conv3x3(channels_per_stage[0], num_classes)
@@ -69,7 +98,7 @@ class UNetCustom(nn.Module):
 
     def _make_down_stage(self, in_channels, out_channels, num_blocks, stride):
 
-        residual_adj = None      # For adjusting number of channels and size of the residual connection
+        residual_adj = None   # For adjusting number of channels and size of the residual connection
         norm_layer = self.norm_layer
         block = self.residual_block
 
@@ -102,7 +131,8 @@ class UNetCustom(nn.Module):
         upsample = Upsample(in_channels, out_channels, upsample_strategy=self.upsample_strategy, 
                             mode='nearest')
         layers = []
-        # 2*out_channels is used here because the first upsample block concatenates the output of a downsample block
+        # 2*out_channels is used here because the first upsample block concatenates the output 
+        # of a downsample block
         layers.append(block(2*out_channels, out_channels, 1, residual_adj)) 
         for _ in range(1, num_blocks):
             layers.append(block(out_channels, out_channels))
@@ -214,10 +244,10 @@ def get_main_resunet_modules(model, depth=1, include_decoder=True):
 
     module_names = ['stage_input']
     if depth==1:
-        for name in model.encoder.keys():
+        for name in model.encoder:
             module_names.append(f'encoder.{name}')
         if include_decoder:
-            for name in model.decoder.keys():
+            for name in model.decoder:
                 module_names.append(f'decoder.{name}.2')
     elif depth==2:
         from torchtrainer.models.layers import BasicBlock
@@ -230,9 +260,17 @@ def get_main_resunet_modules(model, depth=1, include_decoder=True):
 
     return module_names
 
-def get_model(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels=1, num_classes=2, weights_strategy=None):
+def get_model(
+        blocks_per_encoder_stage, 
+        blocks_per_decoder_stage, 
+        channels_per_stage, 
+        num_channels=1, 
+        num_classes=2, 
+        weights_strategy=None
+        ):
 
-    model = UNetCustom(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, num_channels, num_classes)
+    model = UNetCustom(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, 
+                       num_channels, num_classes)
 
     # Check if weights_strategy is a path to a checkpoint file
     if weights_strategy is not None:

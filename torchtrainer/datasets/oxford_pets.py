@@ -1,12 +1,15 @@
 import random
 from pathlib import Path
-from PIL import Image
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transf
+from PIL import Image
+from torch.utils.data import Dataset
 from torchvision import tv_tensors
+
 from ..util.train_util import Subset
+
 
 class OxfordIIITPetSeg(Dataset):
     """Oxford Pets segmentation dataset."""
@@ -31,11 +34,12 @@ class OxfordIIITPetSeg(Dataset):
 
         images = []
         segs = []
-        for line in open(anns_file).read().splitlines():
-            if line[0]!="#":   # Discards file comments
-                name, class_id, species_id, breed_id = line.strip().split()
-                images.append(images_folder/f'{name}.jpg')
-                segs.append(segs_folder/f'{name}.png')
+        with open(anns_file) as file:
+            for line in file.read().splitlines():
+                if line[0]!="#":   # Discards file comments
+                    name, class_id, species_id, breed_id = line.strip().split()
+                    images.append(images_folder/f'{name}.jpg')
+                    segs.append(segs_folder/f'{name}.png')
 
         self.classes = ('Background', 'Foreground')
         self.images = images

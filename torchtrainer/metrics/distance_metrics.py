@@ -3,11 +3,12 @@
 https://github.com/google-deepmind/surface-distance/tree/master
 by Cesar Comin
 """
-import torch
-from . import _lookup_tables
 import numpy as np
+import torch
 from scipy import ndimage
+
 from ..util.post_processing import logits_to_preds
+from . import _lookup_tables
 
 type CpuOrCudaTensor = torch.Tensor
 
@@ -69,7 +70,8 @@ class DistanceMetrics:
             ) -> dict:
         
         if targets.ndim-1 != len(self.spacing):
-          raise ValueError(f"Target has {targets.ndim-1} dimensions but spacing has {len(self.spacing)} elements")
+          raise ValueError(f"Target has {targets.ndim-1} dimensions but spacing "
+                           "has {len(self.spacing)} elements")
       
         preds = logits_to_preds(scores, return_indices=True)
         preds = preds.cpu().numpy()>0
@@ -165,7 +167,7 @@ def _crop_to_bounding_box(mask, bbox_min, bbox_max):
                                       bbox_min[2]:bbox_max[2] + 1]
   # pyformat: enable
   else:
-    assert False
+    raise AssertionError()
 
   return cropmask
 
@@ -236,12 +238,11 @@ def compute_surface_distances(mask_gt,
   mask_pred = mask_pred > 0
 
   if not len(mask_gt.shape) == len(mask_pred.shape) == len(spacing_mm):
-    raise ValueError("The arguments must be of compatible shape. Got mask_gt "
-                     "with {} dimensions ({}) and mask_pred with {} dimensions "
-                     "({}), while the spacing_mm was {} elements.".format(
-                         len(mask_gt.shape),
-                         mask_gt.shape, len(mask_pred.shape), mask_pred.shape,
-                         len(spacing_mm)))
+    raise ValueError("The arguments must be of compatible shape. Got mask_gt with "
+                     f"{len(mask_gt.shape)} dimensions ({mask_gt.shape}) and mask_pred with "
+                     f"{len(mask_pred.shape)} dimensions ({mask_pred.shape}), while the spacing_mm "
+                     f"was {len(spacing_mm)} elements."
+                     )
 
   num_dims = len(spacing_mm)
   if num_dims == 2:
@@ -261,8 +262,7 @@ def compute_surface_distances(mask_gt,
     kernel = _lookup_tables.ENCODE_NEIGHBOURHOOD_3D_KERNEL
     full_true_neighbours = 0b11111111
   else:
-    raise ValueError("Only 2D and 3D masks are supported, not "
-                     "{}D.".format(num_dims))
+    raise ValueError(f"Only 2D and 3D masks are supported, not {num_dims}D.")
 
   # compute the bounding box of the masks to trim the volume to the smallest
   # possible processing subvolume

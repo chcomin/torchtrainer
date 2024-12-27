@@ -1,7 +1,9 @@
-from tqdm.auto import tqdm
 import torch
 from torchvision.transforms.v2.functional import resize
+from tqdm.auto import tqdm
+
 from torchtrainer.metrics import ConfusionMatrixMetrics
+
 
 class TTATransform:
     """Base TTA transform class. Every transform must implement the __call__ method 

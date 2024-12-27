@@ -2,19 +2,19 @@
 Utilities for working with PIL, tensor, numpy and imgaug images
 '''
 
+import contextlib
 import random
-import numpy as np
-from PIL import Image
-import torch
-import torchvision
 
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torchvision
 from IPython.display import display
+from PIL import Image
 
-try:
-    from ipywidgets import interact, IntSlider
-except ModuleNotFoundError:
-    pass # Do not import ipywidgets if not present
+with contextlib.suppress(ModuleNotFoundError):
+    # Do not import ipywidgets if not present
+    from ipywidgets import IntSlider, interact
 
 def pil_img_info(img, print_repr=False):
     """Return the following information about a PIL image:
@@ -77,7 +77,8 @@ def show(pil_img, binary=False):
 
     display(pil_img)
 
-def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, print_info=False):
+def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=False, 
+                   print_info=False):
     """Open a PIL image
 
     Parameters
@@ -158,7 +159,8 @@ def get_shape(img, warn=True):
         raise AttributeError("Image is not a PIL, Tensor or ndarray. Cannot safely infer shape")
 
     if min(img_shape)<=4:
-        print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 5 are being discarded')
+        print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 5 '
+              'are being discarded')
         img_shape = filter(lambda v:v>4, img_shape)
 
     return img_shape
@@ -175,7 +177,8 @@ def _create_container(img, text, container_shape, text_height=12, upper_pad=5, l
 
     text_area_height = text_height + upper_pad + lower_pad
     interpolation_shape = (container_shape[0]-text_area_height, container_shape[1])
-    img_rs = skimage.transform.resize(img, interpolation_shape, order=0, preserve_range=True).astype(np.uint8)
+    img_rs = skimage.transform.resize(
+        img, interpolation_shape, order=0, preserve_range=True).astype(np.uint8)
 
     container_bg = np.full((container_shape[0], container_shape[1], 3), 255, dtype=np.uint8)
     container_bg[text_area_height:] = img_rs
@@ -252,13 +255,15 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
         # Convert back
         containers.append(torch.from_numpy(container.transpose(2, 0, 1)))
 
-    img_grid = torchvision.utils.make_grid(containers, nrow=nrow, padding=padding, pad_value=255).permute(1, 2, 0)
+    img_grid = torchvision.utils.make_grid(
+        containers, nrow=nrow, padding=padding, pad_value=255).permute(1, 2, 0)
 
     return img_grid
 
 
 class PerfVisualizer:
-    """Class for visualizing classification results in increasing order of the values returned by `perf_func`"""
+    """Class for visualizing classification results in increasing order of the values returned 
+    by `perf_func`"""
 
     def __init__(self, dataset, model, perf_func, model_pred_func=None, device=None):
 
@@ -266,10 +271,7 @@ class PerfVisualizer:
             model_pred_func = self.pred
 
         if device is None:
-            if torch.cuda.is_available():
-                device = torch.device('cuda')
-            else:
-                device = torch.device('cpu')
+            device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         self.dataset = dataset
         self.model = model
@@ -294,7 +296,9 @@ class PerfVisualizer:
         for idx, (img, label) in enumerate(self.dataset):
             if label.ndim>1 and label.sum()>label_thresh:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
-                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 'perf':predb_acc.item()}
+                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 
+                                                                    'perf':predb_acc.item()
+                                                                    }
 
             perc = 100*(idx+1)/num_samples
             if idx%print_interv==0 or idx==num_samples-1:
@@ -346,7 +350,8 @@ class PerfVisualizer:
             file, perf = samples_to_plot[idx]
             img, label, *_ = self.dataset.get_item(perf['idx'])
             img_transf, label_transf, *_ = self.dataset[perf['idx']]
-            _, bin_pred = self.pred(img_transf.unsqueeze(0), label_transf.unsqueeze(0), return_classes=True)
+            _, bin_pred = self.pred(img_transf.unsqueeze(0), label_transf.unsqueeze(0), 
+                                    return_classes=True)
             bin_pred = bin_pred[0]
 
             if show_original:
@@ -376,10 +381,7 @@ class InteractiveVisualizer:
     def __init__(self, dataset, model, perf_list=None, device=None):
         
         if device is None:
-            if torch.cuda.is_available():
-                device = torch.device('cuda')
-            else:
-                device = torch.device('cpu')    
+            device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         
         model.to(device)
         model.eval()
@@ -391,7 +393,8 @@ class InteractiveVisualizer:
         
         self.init_plot()
         
-        interact(self.display_item, idx=IntSlider(min=0, max=len(perf_list)-1, step=1, continuous_update=False))
+        interact(self.display_item, idx=IntSlider(min=0, max=len(perf_list)-1, step=1, 
+                                                  continuous_update=False))
         
     def init_plot(self):
         
