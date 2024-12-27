@@ -2,8 +2,8 @@
 images from the respective datasets."""
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray

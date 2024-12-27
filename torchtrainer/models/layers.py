@@ -164,7 +164,7 @@ def interpolate_grid_sample(
         raise ValueError("Either size os scale_factor must be given")
     if isinstance(size, int):
         size = (size, size)
-    if isinstance(scale_factor, (int,float)):
+    if isinstance(scale_factor, int | float):
         scale_factor = (scale_factor, scale_factor)
 
     nr_i, nc_i = input.shape[-2:]

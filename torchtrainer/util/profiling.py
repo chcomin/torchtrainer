@@ -2,8 +2,8 @@
 
 import copy
 import time
+from collections.abc import Callable
 from contextlib import nullcontext
-from typing import Callable
 
 import torch
 import torch.nn as nn

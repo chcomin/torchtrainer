@@ -239,7 +239,7 @@ class WrapDict:
         except TypeError:
             values = (values,)
 
-        return {name: value for name, value in zip(self.names, values)}
+        return dict(zip(self.names, values))
 
 class SingleMetric:
     """

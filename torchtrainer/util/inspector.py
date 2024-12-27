@@ -1,7 +1,6 @@
 """Inspector class for inspecting models parameters, gradients and activations"""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -11,8 +10,8 @@ class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation 
     gradients."""
     
-    def __init__(self, model: nn.Module, modules_to_track: Optional[list[nn.Module]] = None, 
-                 agg_func: Optional[Callable] = None, track_relu: Optional[bool] = False) -> None:
+    def __init__(self, model: nn.Module, modules_to_track: list[nn.Module] | None = None, 
+                 agg_func: Callable | None = None, track_relu: bool = False) -> None:
         """Inspector class for capturing modules' parameters, gradients, activations and activation
         gradients.
 
@@ -85,7 +84,7 @@ class Inspector:
         
         self._create_hooks()
 
-    def get_params(self, return_dict: Optional[bool] = False) -> Union[dict,list]:
+    def get_params(self, return_dict: bool = False) -> dict | list:
         """Get model parameters. If return_dict is True, the returned dictionary has the format 
         {layer_name: {param_name: data,...},...}. If return_dict is False, the returned list has the
         format [(layer_name.param_name, data),...].
@@ -95,7 +94,7 @@ class Inspector:
         """
         return self._capture_params_grads('param', return_dict)
         
-    def get_grads(self, return_dict: Optional[bool] = False) -> Union[dict,list]:
+    def get_grads(self, return_dict: bool = False) -> dict | list:
         """Get model parameters gradients. If return_dict is True, the returned dictionary has the 
         format {layer_name: {param_name: data,...},...}. If return_dict is False, the returned 
         list has the format [(layer_name.param_name, data),...].
@@ -118,7 +117,7 @@ class Inspector:
 
         return self.model_acts['act_grad']
 
-    def start_tracking_activations(self, erase: Optional[bool]=True) -> None:
+    def start_tracking_activations(self, erase: bool = True) -> None:
         '''Start tracking model activations. Warning, tracking activations leads to slower model 
         execution.When a call to model.forward() is executed, the activations are saved internally 
         and can be retrieved using the `get_activations()` method.
@@ -132,7 +131,7 @@ class Inspector:
             self.model_acts['act'] = []
         self._add_activation_hooks()
 
-    def start_tracking_act_grads(self, erase: Optional[bool]=True) -> None:
+    def start_tracking_act_grads(self, erase: bool = True) -> None:
         '''Start tracking the gradients of the activations. Warning, tracking activation gradients 
         leads to slower model execution. When a call to model.forward() is executed, the gradients 
         are saved internally and can be retrieved using the `get_act_grads()` method.
@@ -228,7 +227,7 @@ class Inspector:
         self.act_grad_hook_handles = act_grad_hook_handles
 
     def _capture_params_grads(self, which: str = 'param', 
-                              return_dict: Optional[bool] = False) -> Union[dict,list]:
+                              return_dict: bool = False) -> dict | list:
         """Get model parameters or gradients. `which` can be 'param' or 'grad'."""
 
         out = {}

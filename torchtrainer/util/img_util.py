@@ -306,7 +306,7 @@ class PerfVisualizer:
 
         print(''*30, end='\r')
 
-        perf_list = sorted(list(perf_dict.items()), key=lambda x:x[1]['perf'])
+        perf_list = sorted(perf_dict.items(), key=lambda x:x[1]['perf'])
         self.perf_list = perf_list
 
         return perf_list

@@ -239,7 +239,7 @@ class ReceptiveField:
             pixel = (size[0]//2, size[1]//2)
             pix_val_0 = act[0, 0, pixel[0], pixel[1]]
             pix_val_diffs = []
-            for i in range(0, img_size[1]):
+            for i in range(img_size[1]):
                 x[0, 0, img_size[0]//2, i] = 1
                 _ = model(x)
                 x[0, 0, img_size[0]//2, i] = 0
