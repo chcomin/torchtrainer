@@ -38,10 +38,10 @@ class OxfordIIITPetSeg(Dataset):
             for line in file.read().splitlines():
                 if line[0]!="#":   # Discards file comments
                     name, class_id, species_id, breed_id = line.strip().split()
-                    images.append(images_folder/f'{name}.jpg')
-                    segs.append(segs_folder/f'{name}.png')
+                    images.append(images_folder/f"{name}.jpg")
+                    segs.append(segs_folder/f"{name}.png")
 
-        self.classes = ('Background', 'Foreground')
+        self.classes = ("Background", "Foreground")
         self.images = images
         self.segs = segs
         self.transforms = transforms

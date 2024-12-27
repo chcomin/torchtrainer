@@ -303,7 +303,7 @@ class ROCCurve:
             )
 
 class WeightedAverage:
-    '''Create exponentially weighted moving average.'''
+    """Create exponentially weighted moving average."""
 
     def __init__(self, momentum=0.9):
 
@@ -434,21 +434,21 @@ def confusion_matrix_elements(
     iou = tp/(tp+fp+fn+eps)
 
     metrics = {
-        'tpr': tpr,
-        'fnr': fnr,
-        'fpr': fpr,
-        'tnr': tnr,
-        'ppv': ppv,
-        'fdr': fdr,
-        'acc': acc,
-        'f1': f1,
-        'iou': iou,
-        'recall': tpr,
-        'sensitivity': tpr,
-        'specificity': tnr,
-        'precision': ppv,
-        'dice': f1,
-        'jaccard': iou,
+        "tpr": tpr,
+        "fnr": fnr,
+        "fpr": fpr,
+        "tnr": tnr,
+        "ppv": ppv,
+        "fdr": fdr,
+        "acc": acc,
+        "f1": f1,
+        "iou": iou,
+        "recall": tpr,
+        "sensitivity": tpr,
+        "specificity": tnr,
+        "precision": ppv,
+        "dice": f1,
+        "jaccard": iou,
     }
 
     return metrics

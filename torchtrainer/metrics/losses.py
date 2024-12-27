@@ -39,7 +39,7 @@ class SingleChannelCrossEntropyLoss(torch.nn.CrossEntropyLoss):
 class LabelWeightedCrossEntropyLoss(torch.nn.Module):
     """Return loss weighted by inverse label frequency in an image."""
     
-    def __init__(self, reduction='mean'):
+    def __init__(self, reduction="mean"):
         super().__init__()
         
         self.reduction = reduction
@@ -50,7 +50,7 @@ class LabelWeightedCrossEntropyLoss(torch.nn.Module):
 
 class FocalLoss(torch.nn.Module):
     
-    def __init__(self, weight=None, gamma=2., ignore_index=-100, reduction='mean'):
+    def __init__(self, weight=None, gamma=2., ignore_index=-100, reduction="mean"):
         super().__init__()
         
         if weight is None:
@@ -75,7 +75,7 @@ class BCELossNorm(torch.nn.Module):
         super().__init__()
 
     def forward(self, input, target):
-        bce_loss = F.binary_cross_entropy(input, target, reduction='none')
+        bce_loss = F.binary_cross_entropy(input, target, reduction="none")
         # clamp values to avoid infinite at 0 and 1
         t_clamp = torch.log(target).clamp(-100)
         ti_clamp = torch.log(1-target).clamp(-100)
@@ -85,7 +85,7 @@ class BCELossNorm(torch.nn.Module):
         return bce_loss_norm.mean()
 
 class LabelSmoothingLoss(torch.nn.Module):
-    def __init__(self, num_classes, smoothing=0.0, weight=None, reduction='mean'):
+    def __init__(self, num_classes, smoothing=0.0, weight=None, reduction="mean"):
         """Adapted from https://github.com/pytorch/pytorch/issues/7455#issuecomment-513062631
         if smoothing == 0, it's one-hot method
         if 0 < smoothing < 1, it's smooth method
@@ -103,9 +103,9 @@ class LabelSmoothingLoss(torch.nn.Module):
 
     def reduce_loss(self, loss_per_item):
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             loss = loss_per_item.mean() 
-        elif self.reduction == 'sum':
+        elif self.reduction == "sum":
             loss = loss_per_item.sum() 
 
         return loss
@@ -132,7 +132,7 @@ def single_channel_cross_entropy(
         target, 
         weight=None, 
         ignore_index=-100, 
-        reduction='mean', 
+        reduction="mean", 
         label_smoothing=0.0
     ):
     """Single channel cross entropy loss. See SingleChannelCrossEntropyLoss for more details.
@@ -152,7 +152,7 @@ def single_channel_cross_entropy(
         )
 
 def weighted_cross_entropy(input, target, weight=None, epoch=None):
-    '''Weighted cross entropy. The probabilities for each pixel are weighted according to
+    """Weighted cross entropy. The probabilities for each pixel are weighted according to
     `weight`.
 
     Parameters
@@ -169,14 +169,14 @@ def weighted_cross_entropy(input, target, weight=None, epoch=None):
     -------
     loss : float
         The calculated loss
-    '''
+    """
 
-    loss_per_pix = F.cross_entropy(input, target, reduction='none')
+    loss_per_pix = F.cross_entropy(input, target, reduction="none")
     loss = (weight*loss_per_pix).mean()
 
     return loss
 
-def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction='mean'):
+def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction="mean"):
     """Return loss weighted by inverse label frequency. loss_func must have a weight argument."""
 
     num_pix_in_class = torch.bincount(target.view(-1)).float()
@@ -184,9 +184,9 @@ def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction='mea
     weight = weight/weight.sum()
     return loss_func(input, target, weight=weight, reduction=reduction)
          
-def focal_loss(input, target, weight, gamma, ignore_index=-100, reduction='mean'):
+def focal_loss(input, target, weight, gamma, ignore_index=-100, reduction="mean"):
     
-    logpt = F.cross_entropy(input, target, ignore_index=ignore_index, reduction='none')
+    logpt = F.cross_entropy(input, target, ignore_index=ignore_index, reduction="none")
     pt = torch.exp(-logpt)
 
     focal_term = (1.0 - pt).pow(gamma)
@@ -194,11 +194,11 @@ def focal_loss(input, target, weight, gamma, ignore_index=-100, reduction='mean'
 
     loss *= weight[0]*(1-target) + weight[1]*target
     
-    if reduction == 'none':
+    if reduction == "none":
         pass
-    elif reduction == 'mean':
+    elif reduction == "mean":
         loss = loss.mean()
-    elif reduction == 'sum':
+    elif reduction == "sum":
         loss = loss.sum()
         
     return loss

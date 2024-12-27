@@ -38,7 +38,7 @@ class UNetCustom(nn.Module):
             channels_per_stage, 
             num_channels=1, 
             num_classes=2, 
-            upsample_strategy='interpolation', 
+            upsample_strategy="interpolation", 
             zero_init_residual=False
             ):
         super().__init__()
@@ -66,12 +66,12 @@ class UNetCustom(nn.Module):
         # Encoder stages. Each stage involves a downsample and a change to the number of channels 
         # at the beggining, followed by blocks_per_encoder_stage[i] residual blocks. The only 
         # exception is the first stage that downsamples but does not change the number of channels.
-        stages = [('stage_0', self._make_down_stage(channels_per_stage[0], 
+        stages = [("stage_0", self._make_down_stage(channels_per_stage[0], 
                                                     channels_per_stage[0], 
                                                     blocks_per_encoder_stage[0], 
                                                     stride=2))]
         for idx in range(num_stages-1):
-            stages.append((f'stage_{idx+1}', self._make_down_stage(channels_per_stage[idx], 
+            stages.append((f"stage_{idx+1}", self._make_down_stage(channels_per_stage[idx], 
                                                                    channels_per_stage[idx+1], 
                                                                    blocks_per_encoder_stage[idx+1], 
                                                                    stride=2)))
@@ -84,10 +84,10 @@ class UNetCustom(nn.Module):
         # changes the number of channels.
         stages = []
         for idx in range(num_stages-1, 0, -1):
-            stages.append((f'stage_{idx}',self._make_up_stage(channels_per_stage[idx], 
+            stages.append((f"stage_{idx}",self._make_up_stage(channels_per_stage[idx], 
                                                               channels_per_stage[idx-1], 
                                                               blocks_per_decoder_stage[idx])))
-        stages.append((f'stage_{0}', self._make_up_stage(channels_per_stage[0], 
+        stages.append((f"stage_{0}", self._make_up_stage(channels_per_stage[0], 
                                                          channels_per_stage[0], 
                                                          blocks_per_decoder_stage[0])))
 
@@ -129,7 +129,7 @@ class UNetCustom(nn.Module):
         )
 
         upsample = Upsample(in_channels, out_channels, upsample_strategy=self.upsample_strategy, 
-                            mode='nearest')
+                            mode="nearest")
         layers = []
         # 2*out_channels is used here because the first upsample block concatenates the output 
         # of a downsample block
@@ -145,7 +145,7 @@ class UNetCustom(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.BatchNorm2d | nn.GroupNorm):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -217,7 +217,7 @@ class DeepSupervision:
         return acts
 
     def attach_hooks(self, modules):
-        '''Attach forward hooks to a list of modules to get activations.'''
+        """Attach forward hooks to a list of modules to get activations."""
 
         hooks = []
         for module in modules:
@@ -242,21 +242,21 @@ def get_main_resunet_modules(model, depth=1, include_decoder=True):
         list: List of modules
     """
 
-    module_names = ['stage_input']
+    module_names = ["stage_input"]
     if depth==1:
         for name in model.encoder:
-            module_names.append(f'encoder.{name}')
+            module_names.append(f"encoder.{name}")
         if include_decoder:
             for name in model.decoder:
-                module_names.append(f'decoder.{name}.2')
+                module_names.append(f"decoder.{name}.2")
     elif depth==2:
         from torchtrainer.models.layers import BasicBlock
         for name, module in model.named_modules():
             if isinstance(module, BasicBlock):
-                if 'encoder' in name or include_decoder:
+                if "encoder" in name or include_decoder:
                     module_names.append(name)  
     if include_decoder:
-        module_names.append('conv_output')
+        module_names.append("conv_output")
 
     return module_names
 

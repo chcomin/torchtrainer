@@ -107,7 +107,7 @@ class RetinaDataset(Dataset):
 
         # Select green channel or convert to gray
         if self.channels=="gray":
-            image = image.convert('L')
+            image = image.convert("L")
         image = np.array(image)
         if self.channels=="green":
             image = image[:,:,1]
@@ -184,7 +184,7 @@ class DRIVE(RetinaDataset):
         masks = []
         for file in files:
 
-            num, _ = file.split('_')
+            num, _ = file.split("_")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{num}_manual1.gif")
             masks.append(root_masks/f"{num}_{mask_str}_mask.gif")
@@ -217,7 +217,7 @@ class CHASEDB1(RetinaDataset):
         masks = []
         for file in files:
 
-            filename, _ = file.split('.')
+            filename, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filename}_1stHO.png")
             masks.append(root_masks/f"{filename}.png")
@@ -250,7 +250,7 @@ class STARE(RetinaDataset):
         masks = []
         for file in files:
 
-            filename, _ = file.split('.')
+            filename, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filename}.ah.png")
             masks.append(root_masks/f"{filename}.png")
@@ -283,7 +283,7 @@ class HRF(RetinaDataset):
         masks = []
         for file in files:
 
-            filename, _ = file.split('.')
+            filename, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filename}.tif")
             masks.append(root_masks/f"{filename}_mask.tif")
@@ -323,7 +323,7 @@ class FIVES(RetinaDataset):
         masks = []
         for file in files:
 
-            filname, _ = file.split('.')
+            filname, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filname}.png")
             masks.append(self.root/"mask.png")
@@ -402,7 +402,7 @@ class VessMAP(Dataset):
         labels = []
         for file in files:
 
-            filename, _ = file.split('.')
+            filename, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filename}.png")
 
@@ -479,7 +479,7 @@ class CORTEX(Dataset):
         labels = []
         for file in files:
 
-            filename, _ = file.split('.')
+            filename, _ = file.split(".")
             images.append(root_imgs/file)
             labels.append(root_labels/f"{filename}.png")
 

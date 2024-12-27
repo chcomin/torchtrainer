@@ -32,7 +32,7 @@ class ActivationSampler(nn.Module):
         return hook
 
     def extra_repr(self):
-        return f'{self.model_name}'
+        return f"{self.model_name}"
     
     def __del__(self): self.hook_handler.remove()
 
@@ -98,7 +98,7 @@ class ReceptiveField:
     norm_layers = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
     linear_layers = (nn.Linear,)
 
-    def __init__(self, model, device='cuda'):
+    def __init__(self, model, device="cuda"):
 
         self.device = device
         model = copy.deepcopy(model)
@@ -143,10 +143,10 @@ class ReceptiveField:
                     module.weight[:] = 1./n
                 elif len(list(module.parameters(recurse=False)))>0:
                     # Layer has parameter but is not one of the modules above
-                    print(f'Warning, module {name} was not recognized.')
+                    print(f"Warning, module {name} was not recognized.")
 
     def receptive_field(self, module_name, num_channels=1, img_size=(512, 512), pixel=None):
-        '''Calculate the receptive field of a pixel in the activation map of a neural network layer.
+        """Calculate the receptive field of a pixel in the activation map of a neural network layer.
         
         Parameters
         ----------
@@ -163,7 +163,7 @@ class ReceptiveField:
         -------
         rf: torch.tensor
             An image containing the receptive field.
-        '''
+        """
 
         model = self.model
         module = model.get_submodule(module_name)
@@ -223,7 +223,7 @@ class ReceptiveField:
         return bbox, center
     
     def receptive_field_bf(self, module, num_channels=1, img_size=(512, 512)):
-        '''Calculate receptive field using brute force.'''
+        """Calculate receptive field using brute force."""
 
         model = self.model
         self.prepare_model(model)
@@ -278,7 +278,7 @@ class FeatureExtractor:
         acts = self.get_activations(self.module_names, hooks)
         self.remove_hooks(hooks)
 
-        acts['out'] = out
+        acts["out"] = out
 
         return acts
 
@@ -291,7 +291,7 @@ class FeatureExtractor:
         return acts
 
     def attach_hooks(self, modules):
-        '''Attach forward hooks to a list of modules to get activations.'''
+        """Attach forward hooks to a list of modules to get activations."""
 
         hooks = []
         for module in modules:
@@ -328,18 +328,18 @@ def define_opt_params(module_groups, lr=None, wd=None, debug=False):
 
     opt_params = []
     for idx, group in enumerate(module_groups):
-        group_params = {'params':[]}
+        group_params = {"params":[]}
         if lr is not None: 
-            group_params['lr'] = lr[idx]
+            group_params["lr"] = lr[idx]
         if wd is not None: 
-            group_params['wd'] = wd[idx]
+            group_params["wd"] = wd[idx]
         for module in group:
             pars = module.parameters(recurse=False)
             if debug: 
                 print(module.__class__)
             pars = list(filter(lambda p: p.requires_grad, pars))
             if len(pars)>0:
-                group_params['params'] += pars
+                group_params["params"] += pars
                 if debug:
                     for p in pars:
                         print(p.shape)
@@ -379,7 +379,7 @@ def get_submodule(model, module):
     'layer_name.sublayer_name'
     """
 
-    modules_names = module.split('.')
+    modules_names = module.split(".")
     curr_module = model
     for name in modules_names:
         curr_module = curr_module._modules[name]
@@ -402,7 +402,7 @@ def _iterate_modules(father_name, module, module_name, adj_list, modules_dict):
     
     modules_dict[module_name] = module
     for child_module_name, child_module in module.named_children():
-        full_child_name = f'{module_name}.{child_module_name}'
+        full_child_name = f"{module_name}.{child_module_name}"
         if module_name in adj_list:
             adj_list[module_name].append(full_child_name)
         else:
@@ -422,22 +422,22 @@ def model_up_to(model, module):
     """Return a new model with all layers in model up to layer `module`."""
     
     split_module_str = get_submodule_str(model, module)
-    split_modules_names = split_module_str.split('.')
+    split_modules_names = split_module_str.split(".")
     module = model
     splitted_model = []
-    name_prefix = ''
+    name_prefix = ""
     for idx, split_module_name in enumerate(split_modules_names):
         for child_module_name, child_module in module.named_children():
             if child_module_name==split_module_name:
                 if idx==len(split_modules_names)-1:
                     # If at last module
-                    full_name = f'{name_prefix}{child_module_name}'
+                    full_name = f"{name_prefix}{child_module_name}"
                     splitted_model.append((full_name, child_module))
                 module = child_module
-                name_prefix += split_module_name + '_'
+                name_prefix += split_module_name + "_"
                 break
             else:
-                full_name = f'{name_prefix}{child_module_name}'
+                full_name = f"{name_prefix}{child_module_name}"
                 splitted_model.append((full_name, child_module))
 
     new_model = torch.nn.Sequential(OrderedDict(splitted_model))

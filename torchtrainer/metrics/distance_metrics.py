@@ -37,7 +37,7 @@ class DistanceMetrics:
         tolerance: float = 0., 
         spacing: tuple = (1., 1.), 
         percent: float = 100.,
-        reduction: str = 'mean'):
+        reduction: str = "mean"):
         """
         Parameters
         ----------
@@ -90,15 +90,15 @@ class DistanceMetrics:
                 compute_surface_dice_at_tolerance(surface_distances, self.tolerance),
             ))
 
-        names = ['Distance gt to pred', 'Distance pred to gt', 'Hausdorff distance', 
-                 'Overlap fraction gt', 'Overlap fraction pred', 'Surface Dice']
+        names = ["Distance gt to pred", "Distance pred to gt", "Hausdorff distance", 
+                 "Overlap fraction gt", "Overlap fraction pred", "Surface Dice"]
         named_metrics = {}
         for name, values in zip(names, zip(*metrics)):
             named_metrics[name] = torch.tensor(values)
             
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             named_metrics = {name:values.mean() for name, values in named_metrics.items()}
-        elif self.reduction == 'none':
+        elif self.reduction == "none":
             pass
        
         return named_metrics

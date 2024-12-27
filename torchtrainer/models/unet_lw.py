@@ -8,9 +8,9 @@ def conv1x1(in_planes, out_planes, stride=1):
 
 class ConvBlock(torch.nn.Module):
     def __init__(self, in_c, out_c, k_sz=3, shortcut=False, pool=True):
-        '''
+        """
         pool_mode can be False (no pooling) or True ('maxpool')
-        '''
+        """
         super().__init__()
         if shortcut: 
             self.shortcut = nn.Sequential(conv1x1(in_c, out_c), nn.BatchNorm2d(out_c))
@@ -43,16 +43,16 @@ class ConvBlock(torch.nn.Module):
             return out
 
 class UpsampleBlock(torch.nn.Module):
-    def __init__(self, in_c, out_c, up_mode='transp_conv'):
+    def __init__(self, in_c, out_c, up_mode="transp_conv"):
         super().__init__()
         block = []
-        if up_mode == 'transp_conv':
+        if up_mode == "transp_conv":
             block.append(nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2))
-        elif up_mode == 'up_conv':
-            block.append(nn.Upsample(mode='bilinear', scale_factor=2, align_corners=False))
+        elif up_mode == "up_conv":
+            block.append(nn.Upsample(mode="bilinear", scale_factor=2, align_corners=False))
             block.append(nn.Conv2d(in_c, out_c, kernel_size=1))
         else:
-            raise Exception('Upsampling mode not supported')
+            raise Exception("Upsampling mode not supported")
 
         self.block = nn.Sequential(*block)
 
@@ -77,7 +77,7 @@ class ConvBridgeBlock(torch.nn.Module):
         return out
 
 class UpConvBlock(torch.nn.Module):
-    def __init__(self, in_c, out_c, k_sz=3, up_mode='up_conv', conv_bridge=False, shortcut=False):
+    def __init__(self, in_c, out_c, k_sz=3, up_mode="up_conv", conv_bridge=False, shortcut=False):
         super().__init__()
         self.conv_bridge = conv_bridge
 
@@ -102,7 +102,7 @@ class UNetLW(nn.Module):
             n_classes, 
             layers, 
             k_sz=3, 
-            up_mode='transp_conv', 
+            up_mode="transp_conv", 
             conv_bridge=True, 
             shortcut=True
             ):
@@ -127,7 +127,7 @@ class UNetLW(nn.Module):
         # init, shamelessly lifted from torchvision/models/resnet.py
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.BatchNorm2d | nn.GroupNorm):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)

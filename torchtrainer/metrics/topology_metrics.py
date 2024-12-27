@@ -8,7 +8,7 @@ type CpuOrCudaTensor = torch.Tensor
 
 class ClDice:
     """Calculate the cldice metric for a batch of data."""
-    def __init__(self, reduction: str = 'mean'):
+    def __init__(self, reduction: str = "mean"):
         """
         Parameters
         ----------
@@ -36,7 +36,7 @@ class ClDice:
 def cl_dice(
     scores: CpuOrCudaTensor, 
     targets: CpuOrCudaTensor, 
-    reduction: str = 'mean'
+    reduction: str = "mean"
     ) -> torch.Tensor:
     """Calculate the clDice metric for a batch of data."""
 
@@ -57,9 +57,9 @@ def cl_dice(
 
     scores = torch.tensor(scores)
 
-    if reduction == 'mean':
+    if reduction == "mean":
         scores = scores.mean()
-    elif reduction == 'none':
+    elif reduction == "none":
         pass
 
     return scores

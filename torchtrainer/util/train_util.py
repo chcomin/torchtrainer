@@ -47,9 +47,9 @@ class Logger:
         """
 
         if epoch!=self.current_epoch and epoch!=self.current_epoch+1:
-            raise ValueError(f'Current epoch is {self.current_epoch} but {epoch} received')
+            raise ValueError(f"Current epoch is {self.current_epoch} but {epoch} received")
         if batch_idx>0 and batch_idx!=self.current_batch and batch_idx!=self.current_batch+1:
-            raise ValueError(f'Current batch is {self.current_batch} but {batch_idx} received')
+            raise ValueError(f"Current batch is {self.current_batch} but {batch_idx} received")
         if not isinstance(value, torch.Tensor):
             value = torch.tensor(value)
 
@@ -73,7 +73,7 @@ class Logger:
         """
 
         if epoch!=self.current_epoch and epoch!=self.current_epoch+1:
-            raise ValueError(f'Current epoch is {self.current_epoch} but {epoch} received')
+            raise ValueError(f"Current epoch is {self.current_epoch} but {epoch} received")
 
         self.current_epoch = epoch
 
@@ -127,7 +127,7 @@ class Logger:
                     row[column] = pd.NA
 
         df = pd.DataFrame(self.epoch_data).T
-        df.insert(0, 'epoch', df.index)
+        df.insert(0, "epoch", df.index)
 
         return df
 
@@ -159,7 +159,7 @@ class LoggerPlotter:
     def get_plot(self, logger):
 
         df = logger.get_data()
-        epochs = df['epoch']
+        epochs = df["epoch"]
 
         ncols = 2
         nrows = (len(self.groups)+1)//ncols
@@ -168,14 +168,14 @@ class LoggerPlotter:
         axes = axes.flatten()
 
         for group, ax in zip(self.groups, axes):
-            names = group['names']
-            max_y = group['y_max']
+            names = group["names"]
+            max_y = group["y_max"]
             for name in names:
                 values = df[name]
                 # Mask nan values
                 mask = np.isfinite(values)
-                ax.plot(epochs[mask], values[mask], '-o', ms=2, label=name)
-            ax.set_xlabel('Epoch')
+                ax.plot(epochs[mask], values[mask], "-o", ms=2, label=name)
+            ax.set_xlabel("Epoch")
             ax.legend()
             ax.set_ylim((0, max_y))
 
@@ -287,7 +287,7 @@ class ParseKwargs(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         kw = {}
         for value in values:
-            key, value = value.split('=')
+            key, value = value.split("=")
             try:
                 kw[key] = ast.literal_eval(value)
             except ValueError:
@@ -297,7 +297,7 @@ class ParseKwargs(argparse.Action):
 class ParseText(argparse.Action):
     """Class to use when parsing a text from the command line."""
     def __call__(self, parser, namespace, values, option_string=None):
-        text = ' '.join(values)
+        text = " ".join(values)
         setattr(namespace, self.dest, text)
 
 def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
@@ -329,7 +329,7 @@ def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
     for k, v in param_dict.items():
         sys_argv.append(f"--{k}")
         # If the argument is boolean, the value should be empty
-        if v!='' and v is not None:
+        if v!="" and v is not None:
             # Dictionary values are allowed to be int or float, but command line
             # arguments are always strings, so we need to convert them
             v = str(v)
@@ -361,22 +361,22 @@ def show_log(logger):
     """
 
     df = logger.get_data()
-    epochs = df['epoch']
-    train_loss = df['train/loss']
-    valid_loss = df['valid/loss']
+    epochs = df["epoch"]
+    train_loss = df["train/loss"]
+    valid_loss = df["valid/loss"]
     acc_names = df.columns[4:]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9,3))
-    ax1.plot(epochs, train_loss, '-o', ms=2, label='Train loss')
-    ax1.plot(epochs, valid_loss, '-o', ms=2, label='Valid loss')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
+    ax1.plot(epochs, train_loss, "-o", ms=2, label="Train loss")
+    ax1.plot(epochs, valid_loss, "-o", ms=2, label="Valid loss")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
     ax1.set_ylim((0,1.))
     ax1.legend()
 
     for name in acc_names:
-        ax2.plot(epochs, df[name], '-o', ms=2, label=name)
-        ax2.set_xlabel('Epoch')
+        ax2.plot(epochs, df[name], "-o", ms=2, label=name)
+        ax2.set_xlabel("Epoch")
         ax2.set_ylabel(name)
         ax2.set_ylim((0,1.))
         ax2.legend()
@@ -393,7 +393,7 @@ def predict_and_save_val_imgs(runner, epoch, img_indices, run_path):
         prediction = torch.argmax(output, dim=1)
         prediction = 255*prediction/(runner.num_classes-1)
         pil_img = Image.fromarray(prediction.squeeze().to(torch.uint8).numpy())
-        pil_img.save(run_path/'images'/f'image_{img_idx}'/f'epoch_{epoch}.png')
+        pil_img.save(run_path/"images"/f"image_{img_idx}"/f"epoch_{epoch}.png")
 
 def save_params(store):
     """Annotator for saving function parameters."""
@@ -444,7 +444,7 @@ def setup_wandb(args, run_path):
         runs[-1].delete()   
 
     args_dict = vars(args)
-    args_dict['run_name'] = wandb_run_name       
+    args_dict["run_name"] = wandb_run_name       
 
     wandb.init(
         # set the wandb project where this run will be logged
@@ -493,7 +493,7 @@ class CosineAnnealingWarmRestartsImp(lr_scheduler.CosineAnnealingWarmRestarts):
         with _enable_get_lr_call(self):
             for i, data in enumerate(zip(self.optimizer.param_groups, self.get_lr())):
                 param_group, lr = data
-                param_group['lr'] = lr
+                param_group["lr"] = lr
                 self.print_lr(self.verbose, i, lr, epoch)
 
-        self._last_lr = [group['lr'] for group in self.optimizer.param_groups]
+        self._last_lr = [group["lr"] for group in self.optimizer.param_groups]

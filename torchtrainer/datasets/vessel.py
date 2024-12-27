@@ -115,12 +115,12 @@ def get_dataset_drive_train(
     dataset_path = Path(dataset_path)
 
     drive_params = {
-        'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
+        "channels":channels, "keepdim":True, "ignore_index":ignore_index
     }
     if split_strategy=="file":
-        with open(dataset_path/'train.csv') as file:
+        with open(dataset_path/"train.csv") as file:
             files_train = file.read().splitlines()
-        with open(dataset_path/'val.csv') as file:
+        with open(dataset_path/"val.csv") as file:
             files_valid = file.read().splitlines()
         ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
         ds_valid = DRIVE(dataset_path, split="all", files=files_valid, **drive_params)
@@ -135,11 +135,11 @@ def get_dataset_drive_train(
         random.shuffle(indices)
         
         class_atts = {
-            'images':ds.images[n_valid:], 'labels':ds.labels[n_valid:], 'classes':ds.classes
+            "images":ds.images[n_valid:], "labels":ds.labels[n_valid:], "classes":ds.classes
         }
         ds_train = Subset(ds, indices[n_valid:], **class_atts)
         class_atts = {
-            'images':ds.images[:n_valid], 'labels':ds.labels[:n_valid], 'classes':ds.classes
+            "images":ds.images[:n_valid], "labels":ds.labels[:n_valid], "classes":ds.classes
         }
         ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
@@ -185,16 +185,16 @@ def get_dataset_drive_test(
     dataset_path = Path(dataset_path)
 
     drive_params = {
-        'channels':channels, 'keepdim':True, 'ignore_index':ignore_index
+        "channels":channels, "keepdim":True, "ignore_index":ignore_index
     }
     if split_strategy=="default":
         ds_train = DRIVE(dataset_path, split="train", **drive_params)
         ds_test = DRIVE(dataset_path, split="test", **drive_params)
     elif split_strategy=="file":
-        with open(dataset_path/'train.csv') as file:
+        with open(dataset_path/"train.csv") as file:
             files_train = file.read().splitlines()
         ds_train = DRIVE(dataset_path, split="all", files=files_train, **drive_params)
-        with open(dataset_path/'test.csv') as file:
+        with open(dataset_path/"test.csv") as file:
             files_test = file.read().splitlines()
         ds_test = DRIVE(dataset_path, split="all", files=files_test, **drive_params)
 
@@ -238,18 +238,18 @@ def get_dataset_vessmap_train(
         random.shuffle(indices)
         
         class_atts = {
-            'images':ds.images[n_valid:], 'labels':ds.labels[n_valid:], 'classes':ds.classes
+            "images":ds.images[n_valid:], "labels":ds.labels[n_valid:], "classes":ds.classes
         }
         ds_train = Subset(ds, indices[n_valid:], **class_atts)
         class_atts = {
-            'images':ds.images[:n_valid], 'labels':ds.labels[:n_valid], 'classes':ds.classes
+            "images":ds.images[:n_valid], "labels":ds.labels[:n_valid], "classes":ds.classes
         }
         ds_valid = Subset(ds, indices[:n_valid], **class_atts)
 
     elif split_strategy=="file":
-        with open(dataset_path/'train.csv') as file:
+        with open(dataset_path/"train.csv") as file:
             files_train = file.read().splitlines()
-        with open(dataset_path/'val.csv') as file:
+        with open(dataset_path/"val.csv") as file:
             files_valid = file.read().splitlines()
         ds_train = VessMAP(dataset_path, keepdim=True, files=files_train)
         ds_valid = DRIVE(dataset_path, keepdim=True, files=files_valid)

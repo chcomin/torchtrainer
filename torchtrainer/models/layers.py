@@ -19,14 +19,14 @@ def conv1x1(in_channels, out_channels, stride=1, groups=1):
         )
 
 def ntuple(x, n):
-    '''Verify if x is iterable. If not, create tuple containing x repeated n times'''
+    """Verify if x is iterable. If not, create tuple containing x repeated n times"""
 
     if isinstance(x, Iterable):
         return x
     return tuple([x]*n)
 
 class BasicBlock(nn.Module):
-    '''Residual block.'''
+    """Residual block."""
 
     def __init__(self, in_channels, out_channels, stride=1, residual_adj=None):
         super().__init__()
@@ -58,21 +58,21 @@ class BasicBlock(nn.Module):
         return out
     
 class Upsample(nn.Module):
-    '''Upsamples an input and optionally adjusts the number of channels.
+    """Upsamples an input and optionally adjusts the number of channels.
     upsample_strategy can be 'interpolation', 'conv_transpose' or 'grid'.
-    '''
+    """
 
     def __init__(
             self, 
             in_channels=None,
             out_channels=None, 
             stride=2, 
-            upsample_strategy='interpolation', 
-            mode='nearest'
+            upsample_strategy="interpolation", 
+            mode="nearest"
             ):
         super().__init__()
 
-        if upsample_strategy=='conv_transpose':
+        if upsample_strategy=="conv_transpose":
             # kernel_size=4 because the input tensor will be filled with zeros as 
             # [a, 0., b, 0., c, 0.,...] and kernel_size=3 would only reach a single value in some 
             # positions. Also, with kernel_size=4 the size of the output is always exactly double 
@@ -90,9 +90,9 @@ class Upsample(nn.Module):
                 )
             else:
                 self.channel_adj = None 
-            if upsample_strategy=='interpolation':
+            if upsample_strategy=="interpolation":
                 self.interpolate = Interpolate(mode)
-            elif upsample_strategy=='grid':    
+            elif upsample_strategy=="grid":    
                 self.interpolate = InterpolateGrid(mode)
 
         self.upsample_strategy = upsample_strategy
@@ -100,10 +100,10 @@ class Upsample(nn.Module):
 
     def forward(self, x, output_shape):
   
-        if self.upsample_strategy=='conv_transpose':
+        if self.upsample_strategy=="conv_transpose":
             x = self.conv(x)
             if x.shape[-2:]!=output_shape:
-                x = F.interpolate(x, output_shape, mode='nearest')
+                x = F.interpolate(x, output_shape, mode="nearest")
         else:
             if self.channel_adj is not None:
                 x = self.channel_adj(x)
@@ -112,10 +112,10 @@ class Upsample(nn.Module):
         return x
 
 class Interpolate(nn.Module):
-    '''Layer that receives two inputs when called: x and output_shape. The layer interpolates the 
-    input to the desired output.'''
+    """Layer that receives two inputs when called: x and output_shape. The layer interpolates the 
+    input to the desired output."""
 
-    def __init__(self, mode='nearest'):
+    def __init__(self, mode="nearest"):
         super().__init__()
         self.mode = mode
 
@@ -147,7 +147,7 @@ class InterpolateConv(nn.Module):
 
 class InterpolateGrid(nn.Module):
 
-    def __init__(self, mode='nearest'):
+    def __init__(self, mode="nearest"):
         super().__init__()
         self.mode = mode
 
@@ -155,10 +155,10 @@ class InterpolateGrid(nn.Module):
         return interpolate_grid_sample(x, output_shape, mode=self.mode)
 
 def interpolate_grid_sample(
-        input, size=None, scale_factor=None, mode='nearest', half_r=True, half_c=True
+        input, size=None, scale_factor=None, mode="nearest", half_r=True, half_c=True
         ):
-    '''Interpolate tensor using half pixel shifts, which preserves the position of the 
-    receptive field.'''
+    """Interpolate tensor using half pixel shifts, which preserves the position of the 
+    receptive field."""
 
     if size is None and scale_factor is None:
         raise ValueError("Either size os scale_factor must be given")
@@ -182,7 +182,7 @@ def interpolate_grid_sample(
     c = nc_i*(torch.arange(0, nc_o)+0.5)/nc_o + delta_c
     cn = 2*(c/nc_i - 0.5)
 
-    rr, cc = torch.meshgrid(rn, cn, indexing='ij')
+    rr, cc = torch.meshgrid(rn, cn, indexing="ij")
     grid = torch.stack((cc,rr), dim=2)
     grid = grid.tile((input.shape[0],1,1,1))
     grid = grid.to(input.device)
@@ -210,7 +210,7 @@ class SE_Block(nn.Module):
         return x * y.expand_as(x)
 
 class Concat(nn.Module):
-    '''Module for concatenating two activations using interpolation'''
+    """Module for concatenating two activations using interpolation"""
 
     def __init__(self, concat_dim=1):
         super().__init__()
@@ -225,12 +225,12 @@ class Concat(nn.Module):
 
     def fix_shape(self, x1, x2):
 
-        x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode='nearest')
+        x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode="nearest")
 
         return x1, x2
 
     def extra_repr(self):
-        s = 'concat_dim={concat_dim}'
+        s = "concat_dim={concat_dim}"
         return s.format(**self.__dict__)
 
 class Blur(nn.Module):
@@ -281,7 +281,7 @@ class Conv2dCH(nn.Module):
             padding=None, 
             groups=1, 
             bias=True,
-            padding_mode='zeros'
+            padding_mode="zeros"
             ):
         super().__init__()
 
@@ -323,11 +323,11 @@ class Conv2dCH(nn.Module):
         self.conv1d_v.reset_parameters()
         self.conv1d_h.reset_parameters()
 
-        '''for module in self.modules():
+        """for module in self.modules():
             if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
                 nn.init.kaiming_normal_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()'''
+                    module.bias.data.zero_()"""
 
 class Conv3dCH(nn.Module):
 
@@ -366,7 +366,7 @@ class Conv3dCH(nn.Module):
             padding=None, 
             groups=1, 
             bias=True,
-            padding_mode='zeros'
+            padding_mode="zeros"
             ):
         super().__init__()
 
@@ -417,9 +417,9 @@ class Conv3dCH(nn.Module):
         self.conv2d_v.reset_parameters()
         self.conv2d_h.reset_parameters()
 
-        '''for module in self.modules():
+        """for module in self.modules():
             if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
                 nn.init.kaiming_normal_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()'''
+                    module.bias.data.zero_()"""
         

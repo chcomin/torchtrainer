@@ -17,7 +17,7 @@ def debug_model_state(model, batch, labels, loss_func, plot=True):
 
     # Translate modules to names
     module_2_name = {}
-    for name, module in model.named_modules(prefix='model'):
+    for name, module in model.named_modules(prefix="model"):
         if not isinstance(module, torch.nn.ReLU):
             module_2_name[module] = name
 
@@ -29,7 +29,7 @@ def debug_model_state(model, batch, labels, loss_func, plot=True):
         stats_act.append((name, output.min(), output.max()))
 
     handles = []
-    for _, module in model.named_modules(prefix='model'):
+    for _, module in model.named_modules(prefix="model"):
         # No need to save relu activations, we known what they are
         if not isinstance(module, torch.nn.ReLU):
             handle = module.register_forward_hook(hook)
@@ -54,7 +54,7 @@ def debug_model_state(model, batch, labels, loss_func, plot=True):
     # Buffers (usually batchnorm statistics)
     stats_buffers = []
     for name, values in model.named_buffers():
-        if 'num_batches_tracked' not in name:
+        if "num_batches_tracked" not in name:
             stats_buffers.append((name, values.min(), values.max()))
 
     # Resume model state
@@ -63,15 +63,15 @@ def debug_model_state(model, batch, labels, loss_func, plot=True):
     model.zero_grad()
 
     if plot:
-        plot_stats(stats_act, 'Activations', 'o')
-        plot_stats(stats_params, 'Parameters', '-o')
-        plot_stats(stats_grads, 'Gradients', '-o')
-        plot_stats(stats_buffers, 'Buffers', '-o')
+        plot_stats(stats_act, "Activations", "o")
+        plot_stats(stats_params, "Parameters", "-o")
+        plot_stats(stats_grads, "Gradients", "-o")
+        plot_stats(stats_buffers, "Buffers", "-o")
 
     return stats_act, stats_params, stats_grads, stats_buffers
 
 def plot_stats(stats, title, marker):
-    '''Plot data.'''
+    """Plot data."""
 
     names, mins, maxs = zip(*stats)
 

@@ -1,6 +1,6 @@
-'''
+"""
 Utilities for working with PIL, tensor, numpy and imgaug images
-'''
+"""
 
 import contextlib
 import random
@@ -40,7 +40,7 @@ def pil_img_info(img, print_repr=False):
     """
 
     if isinstance(img, Image.Image):
-        info_str = f'''
+        info_str = f"""
         Image information:
         Mode:{img.mode}
         Width:{img.width}
@@ -48,9 +48,9 @@ def pil_img_info(img, print_repr=False):
         Num channels:{len(img.getbands())}
         Intensity range: {img.getextrema()}
         Additional info: {img.info}
-        '''
+        """
     else:
-        info_str = 'Not a PIL image'
+        info_str = "Not a PIL image"
 
     if print_repr:
         print(info_str)
@@ -109,7 +109,7 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
     if channel is not None: 
         img = img.getchannel(channel)
     if convert_gray: 
-        img = img.convert('L')
+        img = img.convert("L")
     if is_label:
         # Map intensity values to indices 0, 1, 2,...
         colors = [t[1] for t in img.getcolors()]
@@ -159,8 +159,8 @@ def get_shape(img, warn=True):
         raise AttributeError("Image is not a PIL, Tensor or ndarray. Cannot safely infer shape")
 
     if min(img_shape)<=4:
-        print(f'Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 5 '
-              'are being discarded')
+        print(f"Warning, inferred shape {img_shape} is probably incorrect. Sizes smaller than 5 "
+              "are being discarded")
         img_shape = filter(lambda v:v>4, img_shape)
 
     return img_shape
@@ -191,7 +191,7 @@ def _create_container(img, text, container_shape, text_height=12, upper_pad=5, l
     fig = plt.figure()
     fig.figimage(container_bg, resize=True)
     if text is not None:
-        fig.text(xtext, ytext, text, c='k', fontsize=text_height, ha='center', va='baseline')
+        fig.text(xtext, ytext, text, c="k", fontsize=text_height, ha="center", va="baseline")
     fig.canvas.draw()
     container = np.asarray(fig.canvas.renderer.buffer_rgba())[:,:,:3]
     plt.close(fig)
@@ -271,7 +271,7 @@ class PerfVisualizer:
             model_pred_func = self.pred
 
         if device is None:
-            device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
         self.dataset = dataset
         self.model = model
@@ -296,17 +296,17 @@ class PerfVisualizer:
         for idx, (img, label) in enumerate(self.dataset):
             if label.ndim>1 and label.sum()>label_thresh:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))
-                perf_dict[self.dataset.img_file_paths[idx].stem] = {'idx':idx, 
-                                                                    'perf':predb_acc.item()
+                perf_dict[self.dataset.img_file_paths[idx].stem] = {"idx":idx, 
+                                                                    "perf":predb_acc.item()
                                                                     }
 
             perc = 100*(idx+1)/num_samples
             if idx%print_interv==0 or idx==num_samples-1:
-                print(f'Evaluating images...{perc:1.0f}%', end='\r')
+                print(f"Evaluating images...{perc:1.0f}%", end="\r")
 
-        print(''*30, end='\r')
+        print(""*30, end="\r")
 
-        perf_list = sorted(perf_dict.items(), key=lambda x:x[1]['perf'])
+        perf_list = sorted(perf_dict.items(), key=lambda x:x[1]["perf"])
         self.perf_list = perf_list
 
         return perf_list
@@ -315,7 +315,7 @@ class PerfVisualizer:
 
         with torch.no_grad():
             xb = xb.to(self.device, torch.float32)
-            predb = self.model(xb).to('cpu')
+            predb = self.model(xb).to("cpu")
 
             predb = predb.cpu()
             predb_acc = self.perf_func(predb, yb)
@@ -328,28 +328,28 @@ class PerfVisualizer:
 
     def plot_performance(self):
 
-        perf_vals = [elem[1]['perf'] for elem in self.perf_list]
+        perf_vals = [elem[1]["perf"] for elem in self.perf_list]
 
         plt.figure(figsize=[15,15])
-        plt.plot(perf_vals, '-o')
+        plt.plot(perf_vals, "-o")
         plt.ylim(0, 1)
 
-    def plot_samples(self, num_samples=5, which='worst', show_original=True):
+    def plot_samples(self, num_samples=5, which="worst", show_original=True):
         """which must be {worst, top, random}."""
            
         perf_list = self.perf_list
-        if which=='worst':
+        if which=="worst":
             samples_to_plot = perf_list[0:num_samples]
-        elif which=='best':
+        elif which=="best":
             samples_to_plot = perf_list[-1:num_samples:-1]
-        elif which=='random':
+        elif which=="random":
             samples_to_plot = random.sample(perf_list, num_samples)
 
         plt.figure(figsize=[15, num_samples*6])
         for idx in range(num_samples):
             file, perf = samples_to_plot[idx]
-            img, label, *_ = self.dataset.get_item(perf['idx'])
-            img_transf, label_transf, *_ = self.dataset[perf['idx']]
+            img, label, *_ = self.dataset.get_item(perf["idx"])
+            img_transf, label_transf, *_ = self.dataset[perf["idx"]]
             _, bin_pred = self.pred(img_transf.unsqueeze(0), label_transf.unsqueeze(0), 
                                     return_classes=True)
             bin_pred = bin_pred[0]
@@ -365,15 +365,15 @@ class PerfVisualizer:
                 img_show = img_show.permute(1, 2, 0)
 
             plt.subplot(num_samples, 3, 3*idx+1)
-            plt.imshow(img_show, 'gray')
+            plt.imshow(img_show, "gray")
             plt.title(file)
 
             plt.subplot(num_samples, 3, 3*idx+2)
-            plt.imshow(label_show, 'gray')
+            plt.imshow(label_show, "gray")
 
             plt.subplot(num_samples, 3, 3*idx+3)
-            plt.imshow(bin_pred, 'gray')
-            plt.title(perf['perf'])
+            plt.imshow(bin_pred, "gray")
+            plt.title(perf["perf"])
 
 class InteractiveVisualizer:
     """Copied from cortex notebook"""
@@ -381,7 +381,7 @@ class InteractiveVisualizer:
     def __init__(self, dataset, model, perf_list=None, device=None):
         
         if device is None:
-            device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         
         model.to(device)
         model.eval()
@@ -402,26 +402,26 @@ class InteractiveVisualizer:
         axs = []
         ims = []
         ax = plt.subplot(2, 2, 1)
-        im = ax.imshow(torch.zeros(100, 100), 'gray', vmin=0, vmax=255)
-        ax.axis('off')
+        im = ax.imshow(torch.zeros(100, 100), "gray", vmin=0, vmax=255)
+        ax.axis("off")
         axs.append(ax)
         ims.append(im)
             
         ax = plt.subplot(2, 2, 2)
-        im = ax.imshow(torch.zeros((100, 100)), cmap='gray', vmin=0, vmax=1)
-        ax.axis('off')
+        im = ax.imshow(torch.zeros((100, 100)), cmap="gray", vmin=0, vmax=1)
+        ax.axis("off")
         axs.append(ax)
         ims.append(im)
         
         ax = plt.subplot(2, 2, 3)
         im = ax.imshow(torch.zeros((100, 100, 3)))
-        ax.axis('off')
+        ax.axis("off")
         axs.append(ax)
         ims.append(im)
         
         ax = plt.subplot(2, 2, 4)
-        im = ax.imshow(torch.zeros((100, 100, 3)), cmap='gray', vmin=0, vmax=1)
-        ax.axis('off')
+        im = ax.imshow(torch.zeros((100, 100, 3)), cmap="gray", vmin=0, vmax=1)
+        ax.axis("off")
         axs.append(ax)
         ims.append(im)
             
@@ -438,9 +438,9 @@ class InteractiveVisualizer:
         else:
             item = self.perf_list[idx]
             img_name, data  = item
-            img_idx, perf = data['idx'], data['perf']
+            img_idx, perf = data["idx"], data["perf"]
             axs[0].set_title(img_name)
-            axs[3].set_title(f'{perf:.2f}')
+            axs[3].set_title(f"{perf:.2f}")
             
         xb_or, yb_or, *_ = self.dataset.get_item(img_idx)
         xb_aug, yb_aug, *_ = self.dataset[img_idx]
@@ -452,6 +452,6 @@ class InteractiveVisualizer:
         ims[2].set_data(xb_aug.unsqueeze(3).transpose(0, 3).squeeze())
         ims[3].set_data(bin_pred.squeeze().cpu())
         
-        axs[1].set_title('Target')
-        axs[2].set_title('Augmented image')
+        axs[1].set_title("Target")
+        axs[2].set_title("Augmented image")
         axs[0].figure.canvas.draw()

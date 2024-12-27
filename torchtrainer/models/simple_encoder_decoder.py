@@ -127,7 +127,7 @@ class SimpleEncoderDecoder(nn.Module):
 
         return x
 
-def get_model(encoder_name='resnet18', decoder_channels=64, num_classes=2, weights_strategy=None):
+def get_model(encoder_name="resnet18", decoder_channels=64, num_classes=2, weights_strategy=None):
 
     if weights_strategy=="encoder":
         # Load only encoder weights

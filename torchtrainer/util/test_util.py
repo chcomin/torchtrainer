@@ -80,7 +80,7 @@ class Scale(TTATransform):
         return resize(img, self.shape)
     
 @torch.no_grad()
-def predict_tta(model, img, transforms, type='probs'):
+def predict_tta(model, img, transforms, type="probs"):
     """Apply the model to an image using test time augmentation.
 
     Parameters
@@ -100,7 +100,7 @@ def predict_tta(model, img, transforms, type='probs'):
         The predicted scores averaged over the transformations
     """
 
-    if type not in ('probs', 'logits'):
+    if type not in ("probs", "logits"):
         raise ValueError('type must be one of "probs" or "logits"')
 
     avg_scores = 0.
@@ -109,21 +109,21 @@ def predict_tta(model, img, transforms, type='probs'):
         scores_t = model(img_t.unsqueeze(0))[0]
         scores_t = t.inv(scores_t)
 
-        if type=='probs':
+        if type=="probs":
             scores_t = scores_t.softmax(0)
 
         avg_scores += scores_t
 
     avg_scores /= len(transforms)
 
-    if type=='probs':
+    if type=="probs":
         # Invert the softmax in order to have scores instead of probabilities
         avg_scores = avg_scores.log() - avg_scores[0].log()
 
     return avg_scores
 
 @torch.no_grad()
-def find_optimal_threshold(model, ds, ignore_index=None, device='cuda') -> float:
+def find_optimal_threshold(model, ds, ignore_index=None, device="cuda") -> float:
     """
     Find the optimal threshold to apply to model predictions so as to maximize
     the Dice score.
@@ -160,8 +160,8 @@ def find_optimal_threshold(model, ds, ignore_index=None, device='cuda') -> float
     thresholds = torch.linspace(0, 1, 256)
     pbar = tqdm(
         thresholds,
-        desc='Finding threshold',
-        unit='thresholds',
+        desc="Finding threshold",
+        unit="thresholds",
         leave=False,
         dynamic_ncols=True,
     ) 

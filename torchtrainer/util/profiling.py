@@ -22,8 +22,8 @@ def profile_model(
         input_shape: tuple[int,...], 
         no_grad: bool = True, 
         call_backward: bool = False, 
-        sort_by: str = 'cuda_time_total', 
-        device: str = 'cuda', 
+        sort_by: str = "cuda_time_total", 
+        device: str = "cuda", 
         use_float16: bool = False
         ) -> str:
     """
@@ -48,7 +48,7 @@ def profile_model(
     """
     
     if no_grad and call_backward:
-        raise ValueError('Error, can only call backward if no_grad is False')
+        raise ValueError("Error, can only call backward if no_grad is False")
     
     # Avoid changing the device of original model
     model = copy.deepcopy(model)
@@ -83,13 +83,13 @@ def profile_model(
     report_str = prof.key_averages(group_by_input_shape=True).table(
         sort_by=sort_by, top_level_events_only=True, max_name_column_width=20, 
         max_shapes_column_width=40)
-    result = f'{report_str}\rGPU memory allocated: {memory_allocated/2**30} GiB'
+    result = f"{report_str}\rGPU memory allocated: {memory_allocated/2**30} GiB"
     print(result)
 
     return result
 
 def model_info(model: nn.Module, input_shape: tuple[int,...]) -> str:
-    '''Prints number of floating points, activations and parameters shapes'''
+    """Prints number of floating points, activations and parameters shapes"""
 
     if not HAS_FVCORE:
         print("The fvcore package is not installed. Unable to count flops and activations.")
@@ -97,7 +97,7 @@ def model_info(model: nn.Module, input_shape: tuple[int,...]) -> str:
 
     # Avoid changing the device of original model
     model = copy.deepcopy(model)
-    model.to('cpu')
+    model.to("cpu")
     
     input = torch.rand(input_shape)
     flops = fvcore.nn.FlopCountAnalysis(model, input)
@@ -113,7 +113,7 @@ def benchmark_model(
         input_shape: tuple[int,...], 
         no_grad: bool = True, 
         call_backward: bool = False, 
-        device: str = 'cuda', 
+        device: str = "cuda", 
         use_float16: bool = False, 
         return_model_info: bool = False
         ) -> dict:
@@ -150,8 +150,8 @@ def benchmark_model(
     _GiB = 2**30  
 
     if no_grad and call_backward:
-        raise ValueError('Error, can only call backward if no_grad is False')
-    dtype = torch.bfloat16 if device == 'cpu' else torch.float16
+        raise ValueError("Error, can only call backward if no_grad is False")
+    dtype = torch.bfloat16 if device == "cpu" else torch.float16
 
     if return_model_info and not HAS_FVCORE:
         print("The fvcore package is not installed. Unable to count flops and activations.")
@@ -171,9 +171,9 @@ def benchmark_model(
             acts = fvcore.nn.ActivationCountAnalysis(model, input).total()
             flops = fvcore.nn.FlopCountAnalysis(model, input).total()
         stats = {
-            'params':num_params/_M,
-            'activations':acts/_G,
-            'flops':flops/_G
+            "params":num_params/_M,
+            "activations":acts/_G,
+            "flops":flops/_G
         }
 
     gpu_start = torch.cuda.Event(enable_timing=True)
@@ -209,15 +209,15 @@ def benchmark_model(
     #el_time = max([time_gpu, time_cpu])
 
     stats.update({
-        'memory':memory_allocated/_GiB,
-        'time_cpu':time_cpu,
-        'time_gpu':time_gpu
+        "memory":memory_allocated/_GiB,
+        "time_cpu":time_cpu,
+        "time_gpu":time_gpu
     })
 
-    stats['info'] = []
+    stats["info"] = []
     if return_model_info:
-        stats['info'].extend(['params: M', 'activations: G', 'flops: G'])
-    stats['info'].extend(['memory: GiB', 'time_cpu: s', 'time_gpu: s'])
+        stats["info"].extend(["params: M", "activations: G", "flops: G"])
+    stats["info"].extend(["memory: GiB", "time_cpu: s", "time_gpu: s"])
         
 
     return stats
@@ -279,20 +279,20 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
 
     if profile:
         report_str = cm.key_averages(group_by_input_shape=True).table(
-            sort_by='cuda_time_total', top_level_events_only=True, max_name_column_width=20, 
+            sort_by="cuda_time_total", top_level_events_only=True, max_name_column_width=20, 
             max_shapes_column_width=40)
-        stats = f'{report_str}\rGPU memory allocated: {memory_allocated/_GiB} GiB'
+        stats = f"{report_str}\rGPU memory allocated: {memory_allocated/_GiB} GiB"
     else:
         stats = {
-            'memory':memory_allocated/_GiB,
-            'time_cpu':time_cpu,
-            'time_gpu':time_gpu,
-            'info':['memory: GiB', 'time_cpu: s', 'time_gpu: s']
+            "memory":memory_allocated/_GiB,
+            "time_cpu":time_cpu,
+            "time_gpu":time_gpu,
+            "info":["memory: GiB", "time_cpu: s", "time_gpu: s"]
         }
 
     return stats
 
-if __name__=='__main__':
+if __name__=="__main__":
 
     class Model(nn.Module):
         def __init__(self, num_layers=100, num_channels=16):
@@ -308,17 +308,17 @@ if __name__=='__main__':
                 x = layer(x)
             return x
 
-    model = Model(200, 4).to('cuda')
+    model = Model(200, 4).to("cuda")
     input_shape = (1, 1, 1200, 1200)
 
-    stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device='cuda',
+    stats = benchmark_model(model, input_shape, no_grad=False, call_backward=True, device="cuda",
                             use_float16=False)
-    print(f'{stats}\n\n')
+    print(f"{stats}\n\n")
 
 
-    input = torch.rand(1, 1, 1200, 1200, device='cuda')
+    input = torch.rand(1, 1, 1200, 1200, device="cuda")
     def test_func(model, input):
         model(input).sum().backward()
 
     stats = benchmark_function(test_func, (model, input), profile=False)
-    print(f'{stats}\n\n')
+    print(f"{stats}\n\n")
