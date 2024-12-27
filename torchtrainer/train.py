@@ -11,10 +11,16 @@ import torch.utils
 from torch.utils.data import DataLoader
 from torchtrainer.util.train_util import Logger, LoggerPlotter, WrapDict, dict_to_argv
 from torchtrainer.util.train_util import seed_all, seed_worker, predict_and_save_val_imgs
-from torchtrainer.util.train_util import ParseKwargs, ParseText
+from torchtrainer.util.train_util import ParseKwargs, ParseText, setup_wandb
 from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics
 
-# TODO: wandb 
+try:
+    import wandb
+except ImportError:
+    has_wandb = False
+else:
+    has_wandb = True
+
 # TODO: profiling
 
 class DefaultModuleRunner:
@@ -218,6 +224,12 @@ class DefaultTrainer:
         # Save the config file
         args_yaml = yaml.safe_dump(config_dict, default_flow_style=False)
         open(run_path/'config.yaml', 'w').write(args_yaml)
+
+        # Setup wandb
+        if args.log_wandb:
+            if not has_wandb:
+                raise ImportError("wandb is not installed")
+            setup_wandb(args, run_path)
 
     def get_dataset(
             self, 
@@ -526,6 +538,9 @@ class DefaultTrainer:
                 logger_data.to_csv(run_path/'log.csv', index=False)
                 # Save plot of logged data
                 logger_plotter.get_plot(logger).savefig(run_path/'plots.png')
+
+                if args.log_wandb:
+                    wandb.log(last_metrics.to_dict())
                 
                 checkpoint = module_runner.state_dict()
 
@@ -554,6 +569,9 @@ class DefaultTrainer:
             # This exception allows interrupting the training loop with Ctrl+C,
             # but sometimes it does not work due to the multiprocessing DataLoader
             pass
+
+        if args.log_wandb:
+            wandb.finish()
 
         print("Training has finished")
 
@@ -622,6 +640,9 @@ class DefaultTrainer:
         group.add_argument('--val_img_indices', nargs='*', type=int, default=(0,), metavar='N N N', help='Indices of the validation images to save')
         group.add_argument('--copy_model_every', type=int, default=0, metavar='N', 
                            help='Save a copy of the model every N epochs. If 0 (default) no copies are saved')
+        group.add_argument('--log_wandb', action='store_true', help='If wandb should also be used for logging. Please make sure that you'
+                           'login to wandb by running "wandb login" in the terminal.') 
+        group.add_argument('--wandb_project', default='uncategorized', help='Name of the wandb project to log the data.')
         parser.add_argument('--meta', default='', nargs='*', action=ParseText, help='Additional metadata to save in the config.json file '
                             'describing the experiment. Whitespaces do not need to be escaped.')
 

@@ -3,6 +3,7 @@ import math
 import random
 import argparse
 import ast
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,6 +12,11 @@ from PIL import Image
 import torch
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
+
+try:
+    import wandb
+except ImportError:
+    pass
 
 class Logger:
     """ Class for logging metrics during training and validation. """
@@ -104,6 +110,21 @@ class Logger:
         pd.DataFrame
             The dataframe
         """
+
+        epoch_data = self.epoch_data
+
+        # Get names of metrics logged
+        columns = set()
+        for row in epoch_data.values():
+            for name in row:
+                columns.add(name)
+
+        # Fill missing values with NA, this is important to differentiate
+        # between nan values (math.nan) and missing values
+        for row in epoch_data.values():
+            for column in columns:
+                if column not in row:
+                    row[column] = pd.NA
 
         df = pd.DataFrame(self.epoch_data).T
         df.insert(0, 'epoch', df.index)
@@ -396,6 +417,44 @@ def save_params(store):
             
         return func
     return func_caller
+
+def setup_wandb(args, run_path):
+    """Setup wandb for logging experiments."""
+
+    wandb_project = args.wandb_project
+    experiment_name = args.experiment_name
+    run_name = args.run_name
+
+    wandb_run_name = f"{experiment_name}/{run_name}"
+
+    os.environ["WANDB_SILENT"] = "True"
+    # Find previous run with the same name and delete it
+    api = wandb.Api()
+    runs = api.runs(wandb_project, {"config.run_name": wandb_run_name})
+    try:
+        num_runs = len(runs) 
+    except (ValueError, TypeError):
+        # Project does not exist
+        num_runs = 0
+
+    if num_runs > 1:
+        print(f"Warning, more than one run with name {wandb_run_name} found in project {wandb_project}"
+                "in the wandb database. Deleting only the last run.")
+    if num_runs >= 1:
+        runs[-1].delete()   
+
+    args_dict = vars(args)
+    args_dict['run_name'] = wandb_run_name       
+
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project = wandb_project,
+        dir = str(run_path),
+        name = wandb_run_name,
+        notes = args.meta,
+        # track hyperparameters and run metadata
+        config=args
+    )
 
 class CosineAnnealingWarmRestartsImp(lr_scheduler.CosineAnnealingWarmRestarts):
     """Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for avoiding a large
