@@ -6,7 +6,8 @@ import torch
 
 def debug_model_state(model, batch, labels, loss_func, plot=True):
     """Get minimum and maximum values for all activations, parameters, gradients and buffers of 
-    a model."""
+    a model.
+    """
 
     # eval to avoid changing batchnorm stats
     if model.training:

@@ -1,3 +1,8 @@
+"""
+Script for training PyTorch models.
+Please see the DefaultTrainer class for more information on how to use this script.
+"""
+
 import argparse
 import operator
 import shutil
@@ -130,9 +135,7 @@ class DefaultModuleRunner:
     
     @torch.no_grad()
     def predict(self, batch):
-        """
-        Method to apply after training the model to predict a single batch of data.
-        """
+        """Method to apply after training the model to predict a single batch of data."""
         
         model = self.model
         training = model.training
@@ -162,7 +165,7 @@ class DefaultTrainer:
 
     def __init__(self, param_dict: dict | None = None):
         """
-        This class can be initialized from the command line as 
+        The class can be initialized from the command line as 
         
         python trainer.py --param1 value1 --param2 value2...
 
@@ -178,6 +181,8 @@ class DefaultTrainer:
         3. The value of boolean parameters should be an empty string, e.g. 'bool-par': ''.
         4. In general, values with spaces are invalid since arguments are split by spaces.
            The only exceptions are arguments with nargs set in the parser.
+
+        To see the available parameters, use the --help argument or read the get_parser method.
 
         Parameters
         ----------
@@ -252,7 +257,7 @@ class DefaultTrainer:
             resize_size, 
             augmentation_strategy, 
             **dataset_params):
-        """This method receives dataset parameters from the command line
+        """Receives dataset parameters from the command line
         and returns the training and validation datasets as well as relevant dataset 
         properties.
 
@@ -377,7 +382,7 @@ class DefaultTrainer:
 
     def get_model(self, model_class, weights_strategy, num_classes, num_channels, 
                   **model_params):
-        """This method receives model parameters received from the command line
+        """Receives model parameters from the command line
         and returns the model.
 
         Subclasses of the Trainer class must implement this method when using a
@@ -645,6 +650,7 @@ class DefaultTrainer:
         return args
 
     def get_parser(self) -> argparse.ArgumentParser:
+        """Get the argument parser for the script."""
 
         # The config_parser parses only the --config argument, this argument is used to
         # load a yaml file containing key-values that override the defaults for the main parser

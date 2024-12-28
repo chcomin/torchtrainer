@@ -1,3 +1,5 @@
+"""Metrics for measuring the topology of binary segmentation masks."""
+
 import numpy as np
 import torch
 from skimage.morphology import skeletonize
@@ -8,6 +10,7 @@ type CpuOrCudaTensor = torch.Tensor
 
 class ClDice:
     """Calculate the cldice metric for a batch of data."""
+    
     def __init__(self, reduction: str = "mean"):
         """
         Parameters

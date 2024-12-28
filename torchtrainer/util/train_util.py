@@ -1,3 +1,5 @@
+"""Utilities for using during training and validation."""
+
 import argparse
 import ast
 import contextlib
@@ -157,6 +159,7 @@ class LoggerPlotter:
         self.groups = groups
 
     def get_plot(self, logger):
+        """Return a matplotlib figure with the plots of the logged data."""
 
         df = logger.get_data()
         epochs = df["epoch"]
@@ -187,8 +190,7 @@ class LoggerPlotter:
         
 
 class Subset(Dataset):
-    """Create a new Dataset containing a subset of images from the input Dataset.
-    """
+    """Create a new Dataset containing a subset of images from the input Dataset."""
 
     def __init__(self, ds, indices, transforms=None, **attributes):
         """
@@ -217,10 +219,10 @@ class Subset(Dataset):
         return len(self.indices)
 
 class WrapDict:
-    """
-    Wrapper class to name the return values of a function. Given a function
+    """Wrapper class to name the return values of a function. Given a function
     that returns a value or a tuple, WrapDict creates a new function that returns 
     a dictionary with the names of the tuple elements as keys.
+
     Parameters
     ----------
     names : Names of the values returned by the function
@@ -242,9 +244,7 @@ class WrapDict:
         return dict(zip(self.names, values))
 
 class SingleMetric:
-    """
-    Class for storing a function representing a performance metric.
-    """
+    """Class for storing a function representing a performance metric."""
 
     def __init__(self, metric_name, func):
         """
@@ -262,9 +262,7 @@ class SingleMetric:
         return (self.metric_name, self.func(*args))
 
 class MultipleMetrics:
-    """
-    Class for storing a function that calculates many performance metrics in one call.
-    """
+    """Class for storing a function that calculates many performance metrics in one call."""
 
     def __init__(self, metric_names, func):
         """
@@ -284,10 +282,11 @@ class MultipleMetrics:
 
 class ParseKwargs(argparse.Action):
     """Class to use when parsing a dictionary from the command line."""
+
     def __call__(self, parser, namespace, values, option_string=None):
         kw = {}
-        for value in values:
-            key, value = value.split("=")
+        for item in values:
+            key, value = item.split("=")
             try:
                 kw[key] = ast.literal_eval(value)
             except ValueError:
@@ -296,6 +295,7 @@ class ParseKwargs(argparse.Action):
 
 class ParseText(argparse.Action):
     """Class to use when parsing a text from the command line."""
+
     def __call__(self, parser, namespace, values, option_string=None):
         text = " ".join(values)
         setattr(namespace, self.dest, text)
@@ -332,8 +332,8 @@ def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
         if v!="" and v is not None:
             # Dictionary values are allowed to be int or float, but command line
             # arguments are always strings, so we need to convert them
-            v = str(v)
-            sys_argv.extend(v.split())
+            v_str = str(v)
+            sys_argv.extend(v_str.split())
 
     return sys_argv
 
@@ -356,9 +356,7 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 def show_log(logger):
-    """
-    Plot the logged data from a Logger object in a Jupyter notebook.
-    """
+    """Plot the logged data from a Logger object in a Jupyter notebook."""
 
     df = logger.get_data()
     epochs = df["epoch"]
@@ -386,6 +384,7 @@ def show_log(logger):
     plt.show()
 
 def predict_and_save_val_imgs(runner, epoch, img_indices, run_path):
+    """Apply model and save validation images for a given epoch."""
 
     for img_idx in img_indices:
         img, _ = runner.ds_valid[img_idx]
@@ -409,9 +408,8 @@ def save_params(store):
             for idx, param_name in enumerate(store):
                 if idx<len(args):
                     store[param_name] = args[idx]
-                else:
-                    if param_name in kwargs:
-                        store[param_name] = kwargs[param_name]
+                elif param_name in kwargs:
+                    store[param_name] = kwargs[param_name]
                 
             wrapped_func(*args, **kwargs)
             
@@ -420,7 +418,7 @@ def save_params(store):
 
 def setup_wandb(args, run_path):
     """Setup wandb for logging experiments."""
-
+    
     wandb_project = args.wandb_project
     experiment_name = args.experiment_name
     run_name = args.run_name
@@ -457,10 +455,10 @@ def setup_wandb(args, run_path):
     )
 
 class CosineAnnealingWarmRestartsImp(lr_scheduler.CosineAnnealingWarmRestarts):
-    """
-    Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for 
+    """Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for 
     avoiding a large learning rate at the very last step.
     """
+
     def __init__(self, optimizer, T_0, T_mult=1, eta_min=0, last_epoch=-1, verbose=False):
         super().__init__(optimizer, T_0, T_mult, eta_min, last_epoch, verbose)
 

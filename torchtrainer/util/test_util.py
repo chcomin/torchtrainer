@@ -1,3 +1,5 @@
+"""Utilities for using during the model test phase."""
+
 import torch
 from torchvision.transforms.v2.functional import resize
 from tqdm.auto import tqdm
@@ -7,7 +9,8 @@ from torchtrainer.metrics import ConfusionMatrixMetrics
 
 class TTATransform:
     """Base TTA transform class. Every transform must implement the __call__ method 
-    and the inv method that reverts the transformation."""
+    and the inv method that reverts the transformation.
+    """
 
     def __call__(self):
         raise NotImplementedError
@@ -32,7 +35,7 @@ class Flip(TTATransform):
     """Flip image along a given dimension."""
     
     def __init__(self, dim):
-        """dim must be 1 or 2"""
+        """dim must be 1 or 2."""
         self.dim = dim
 
     def __call__(self, img):
@@ -63,7 +66,7 @@ class Scale(TTATransform):
     """Scale image up or down by a small percentage."""
     
     def __init__(self, shape, perc=5, scale_up=True):
-        """shape is the original shape of the image."""
+        """Shape is the original shape of the image."""
         self.shape = shape
 
         change = (int(shape[0]*perc/100), int(shape[1]*perc/100))

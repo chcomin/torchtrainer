@@ -1,3 +1,5 @@
+"""Performance metrics related to confusion matrix elements (true positives, recall, etc)."""
+
 import torch
 from sklearn import metrics
 
@@ -7,8 +9,8 @@ from ..util.post_processing import logits_to_preds
 type CpuOrCudaTensor = torch.Tensor
 
 class ConfusionMatrixMetrics:
-    """Calculate accuracy, precision, recall, IoU and Dice scores for a batch
-    of data."""
+    """Calculate accuracy, precision, recall, IoU and Dice scores for a batch of data."""
+
     def __init__(
             self, 
             threshold: float = 0.5,
@@ -128,6 +130,7 @@ class MathewsCorrcoef:
     Calculate the Matthews correlation coefficient for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.matthews_corrcoef.html
     """
+
     def __init__(
             self, 
             threshold: float = 0.5, 
@@ -163,6 +166,7 @@ class PrecisionRecallCurve:
     """Calculate the precision-recall curve for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html
     """
+
     def __init__(
             self, 
             ignore_index: int | None = None,
@@ -179,7 +183,7 @@ class PrecisionRecallCurve:
             Whether to drop some suboptimal thresholds
 
         Returns
-        ------
+        -------
         precision
             Precision values
         recall
@@ -210,6 +214,7 @@ class ROCAUCScore:
     Calculate the area under the ROC curve for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html
     """
+
     def __init__(
             self, 
             task: str,
@@ -260,6 +265,7 @@ class ROCCurve:
     Compute the ROC curve for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_curve.html
     """
+
     def __init__(
             self, 
             ignore_index: int | None = None,
@@ -276,7 +282,7 @@ class ROCCurve:
             Whether to drop some suboptimal thresholds
 
         Returns
-        ------
+        -------
         fpr
             False positive rate
         tpr

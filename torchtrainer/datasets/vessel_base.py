@@ -1,5 +1,6 @@
 """The objective of the dataset classes here is to provide a minimal code to load the
-images from the respective datasets."""
+images from the respective datasets.
+"""
 
 import os
 from collections.abc import Callable
@@ -31,7 +32,7 @@ class RetinaDataset(Dataset):
         return_mask: bool = False,
         ignore_index: int | None = None,
         normalize: bool = True,
-        files: list = None,
+        files: list | None = None,
         transforms: Callable | None = None,
     ):
         """
@@ -331,14 +332,14 @@ class FIVES(RetinaDataset):
         return images, labels, masks
     
 class VessMAP(Dataset):
-    """Create a dataset object for holding the VessMAP data. 
-    """
+    """Create a dataset object for holding the VessMAP data."""
+
     def __init__(
         self,
         root: str | Path,
         keepdim: bool = False,
         normalize: bool = True,
-        files: list = None,
+        files: list | None = None,
         transforms: Callable | None = None,
     ):
         """
@@ -410,12 +411,13 @@ class VessMAP(Dataset):
     
 class CORTEX(Dataset):
     """Create a dataset object for holding the CORTEX data. """
+
     def __init__(
         self,
         root: str | Path,
         keepdim: bool = False,
         normalize: bool = True,
-        files: list = None,
+        files: list | None = None,
         transforms: Callable | None = None,
     ):
         """

@@ -1,3 +1,5 @@
+"""Classes for creating artificial data for testing purposes."""
+
 import random
 
 import torch
@@ -40,6 +42,7 @@ class FakeClassificationData(Dataset):
         return self.n_samples
 
 class FakeSegmentationData(FakeClassificationData):
+    """Segmentation dataset that returns a circle or disk image. Used for testing purposes."""
 
     def __getitem__(self, idx):
         idx = random.randint(0, 1)
@@ -51,6 +54,7 @@ class FakeSegmentationData(FakeClassificationData):
         return img, target
     
 class Transforms:
+    """Simple tranform for the fake data."""
 
     def __call__(self, img, target):
         
@@ -60,6 +64,7 @@ class Transforms:
         return img, target
 
 def get_dataset(img_size=224):
+    """Return a fake segmentation dataset."""
 
     transforms = Transforms()
 

@@ -1,3 +1,5 @@
+"""Classes and functions for measuring the loss of a model."""
+
 import torch
 import torch.nn.functional as F
 
@@ -49,6 +51,9 @@ class LabelWeightedCrossEntropyLoss(torch.nn.Module):
         return label_weighted_loss(input, target, F.cross_entropy, self.reduction)
 
 class FocalLoss(torch.nn.Module):
+    """"Focal loss from the paper Focal Loss for Dense Object Detection.
+    https://openaccess.thecvf.com/content_iccv_2017/html/Lin_Focal_Loss_for_ICCV_2017_paper.html
+    """
     
     def __init__(self, weight=None, gamma=2., ignore_index=-100, reduction="mean"):
         super().__init__()
@@ -69,7 +74,8 @@ class BCELossNorm(torch.nn.Module):
     """BCE loss with minium value of 0. 
     
     The usual BCE loss does not go to 0 if target is not 0 or 1. This class 
-    defines a normalized BCE loss that goes to 0."""
+    defines a normalized BCE loss that goes to 0.
+    """
 
     def __init__(self):
         super().__init__()
@@ -85,6 +91,8 @@ class BCELossNorm(torch.nn.Module):
         return bce_loss_norm.mean()
 
 class LabelSmoothingLoss(torch.nn.Module):
+    """Label smoothing loss. Binary targets are smoothed according to the value of `smoothing`."""
+
     def __init__(self, num_classes, smoothing=0.0, weight=None, reduction="mean"):
         """Adapted from https://github.com/pytorch/pytorch/issues/7455#issuecomment-513062631
         if smoothing == 0, it's one-hot method
@@ -135,8 +143,7 @@ def single_channel_cross_entropy(
         reduction="mean", 
         label_smoothing=0.0
     ):
-    """Single channel cross entropy loss. See SingleChannelCrossEntropyLoss for more details.
-    """
+    """Single channel cross entropy loss. See SingleChannelCrossEntropyLoss for more details."""
 
     input_c1 = torch.zeros_like(input)
     # for BCE(x), cross_entropy((-x, 0)) must provide the same result
@@ -165,6 +172,7 @@ def weighted_cross_entropy(input, target, weight=None, epoch=None):
         Weight assigned to each pixel
     epoch : int
         Current training epoch
+
     Returns
     -------
     loss : float
@@ -185,6 +193,7 @@ def label_weighted_loss(input, target, loss_func=F.cross_entropy, reduction="mea
     return loss_func(input, target, weight=weight, reduction=reduction)
          
 def focal_loss(input, target, weight, gamma, ignore_index=-100, reduction="mean"):
+    """Please refer to the FocalLoss class for more details."""
     
     logpt = F.cross_entropy(input, target, ignore_index=ignore_index, reduction="none")
     pt = torch.exp(-logpt)
@@ -230,7 +239,8 @@ class DiceLoss(torch.nn.Module):
         
         return dice_loss(input, target, self.squared, self.eps)
         
-def dice_loss(input, target, squared=False, eps=1e-8):       
+def dice_loss(input, target, squared=False, eps=1e-8):
+    """Dice loss. input must be probabilities."""
     
     input_1 = input[:, 1]            # Probabilities for class 1
 

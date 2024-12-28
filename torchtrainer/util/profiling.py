@@ -31,7 +31,8 @@ def profile_model(
     The model will be called as ``res = model(input).sum()``, with an optional call 
     to res.backward().
 
-    Args:
+    Parameters
+    ----------
         model: A Pytorch model.
         input_shape: size of the input to the model.
         no_grad: profile with torch.no_grad() context.
@@ -43,7 +44,8 @@ def profile_model(
         device: device to profile. Can be ``cpu`` or ``cuda``.
         use_float16: set if half precision should be used for the forward pass.
 
-    Returns:
+    Returns
+    -------
         The result table as a string
     """
     
@@ -117,12 +119,12 @@ def benchmark_model(
         use_float16: bool = False, 
         return_model_info: bool = False
         ) -> dict:
-    
     """
     Benchmark model execution and returns the results in a dictionary. The model will be called as 
     ``res = model(input).sum()``, with an optional call to res.backward().
 
-    Args:
+    Parameters
+    ----------
         model: A Pytorch model.
         input_shape: size of the input to the model.
         no_grad: profile with torch.no_grad() context.
@@ -133,7 +135,8 @@ def benchmark_model(
         return_model_info: if False, do not measure number of parameters, activations and flops, 
             which takes some extra time.
 
-    Returns:
+    Returns
+    -------
         A dictionary containing:
           params: number of parameters in the model.
           activations: number of activations.
@@ -206,7 +209,6 @@ def benchmark_model(
     memory_allocated = final_memory - initial_memory
     time_gpu = gpu_start.elapsed_time(gpu_end)/1000
     time_cpu = (cpu_end - cpu_start)
-    #el_time = max([time_gpu, time_cpu])
 
     stats.update({
         "memory":memory_allocated/_GiB,
@@ -223,20 +225,21 @@ def benchmark_model(
     return stats
 
 def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = False) -> dict:
-    
     """
     Benchmark function execution and returns the results as a dictionary or as a string. 
 
     *Note: the function is executed two times. The first execution is necessary as a warmup. 
     Only the second execution is benchmarked.
 
-    Args:
+    Parameters
+    ----------
         func: the function to benchmark.
         profile: if True, profile the code using Pytorch's profiler. If False, only measure
           max gpu memory used and cpu and gpu times.
         func_params: tuple containing input parameters for executing the function.
 
-    Returns:
+    Returns
+    -------
         If `profile=True`, returns a string containing the result of the Pytorch's profiler. 
         If false, returns a dictionary containing:
           memory: maximum GPU memory used by the model
@@ -294,7 +297,7 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
 
 if __name__=="__main__":
 
-    class Model(nn.Module):
+    class Model(nn.Module):  # noqa: D101
         def __init__(self, num_layers=100, num_channels=16):
             super().__init__()
             self.layers = nn.ModuleList(
@@ -317,7 +320,7 @@ if __name__=="__main__":
 
 
     input = torch.rand(1, 1, 1200, 1200, device="cuda")
-    def test_func(model, input):
+    def test_func(model, input): # noqa: D103
         model(input).sum().backward()
 
     stats = benchmark_function(test_func, (model, input), profile=False)

@@ -48,11 +48,13 @@ class Lambda(nn.Module):
 class Hook:
     """Hook for capturing module activations.
 
-    Args:
+    Parameters
+    ----------
         module (torch.nn.Module): Pytorch module
         detach (bool, optional): If True, detaches the activation from the computation graph. 
             Defaults to True.
     """
+    
     def __init__(self, module, detach=True):
         self.detach = detach
         self.activation = None
@@ -263,9 +265,7 @@ class FeatureExtractor:
 
     def __init__(self, model, module_names):
 
-        modules = []
-        for name in module_names:
-            modules.append(model.get_submodule(name))
+        modules = [model.get_submodule(name) for name in module_names]
 
         self.model = model
         self.module_names = module_names
@@ -293,9 +293,7 @@ class FeatureExtractor:
     def attach_hooks(self, modules):
         """Attach forward hooks to a list of modules to get activations."""
 
-        hooks = []
-        for module in modules:
-            hooks.append(Hook(module))
+        hooks = [Hook(module) for module in modules]
 
         return hooks
 
@@ -307,7 +305,8 @@ class FeatureExtractor:
 
 def split_modules(model, modules_to_split):
     """Split `model` layers into different groups. Useful for freezing part of the model
-    or using different learning rates."""
+    or using different learning rates.
+    """
 
     module_groups = [[]]
     for module in model.modules():
@@ -318,7 +317,8 @@ def split_modules(model, modules_to_split):
 
 def define_opt_params(module_groups, lr=None, wd=None, debug=False):
     """Define distinct learning rate and weight decay for parameters belonging
-    to groupd modules in `module_groups`. """
+    to groupd modules in `module_groups`.
+    """
 
     num_groups = len(module_groups)
     if isinstance(lr, int): 
@@ -348,7 +348,8 @@ def define_opt_params(module_groups, lr=None, wd=None, debug=False):
 
 def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
     """Set requires_grad to `req_grad` for all parameters in `module_groups`.
-    If `keep_bn` is True, batchnorm layers are not changed."""
+    If `keep_bn` is True, batchnorm layers are not changed.
+    """
 
     for group in module_groups:
         for module in group:
@@ -358,7 +359,8 @@ def groups_requires_grad(module_groups, req_grad=True, keep_bn=False):
 
 def freeze_to(module_groups, group_idx=-1, keep_bn=False):
     """Freeze model groups up to the group with index `group_idx`. If `group_idx` is None,
-    freezes the entire model. If `keep_bn` is True, batchnorm layers are not changed."""
+    freezes the entire model. If `keep_bn` is True, batchnorm layers are not changed.
+    """
 
     slice_freeze = slice(0, group_idx)
     if group_idx is not None:
@@ -388,8 +390,7 @@ def get_submodule(model, module):
     return requested_module
     
 def get_submodule_str(model, module):
-    """Return a string representation of `module` in the form 'layer_name.sublayer_name...'
-    """
+    """Return a string representation of `module` in the form 'layer_name.sublayer_name...'"""
 
     for name, curr_module in model.named_modules():
         if curr_module is module:

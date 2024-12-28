@@ -1,6 +1,4 @@
-"""
-Utilities for working with PIL, tensor, numpy and imgaug images
-"""
+"""Utilities for working with PIL, tensor, numpy and imgaug images"""
 
 import contextlib
 import random
@@ -166,7 +164,7 @@ def get_shape(img, warn=True):
     return img_shape
 
 def _create_container(img, text, container_shape, text_height=12, upper_pad=5, lower_pad=5):
-    "Create new image containing the input image and the input text above it."
+    """Create new image containing the input image and the input text above it."""
 
     import skimage
 
@@ -226,7 +224,8 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
     It is assumed that each tensor is a RGB uint8 image with values in the range [0,255]. Also, 
     the first dimension corresponds to the image channels.
 
-    Args:
+    Parameters
+    ----------
         tensors (List[torch.tensor]): List of tensors to draw. 
         nrow (int): Number of images displayed in each row of the grid.
         container_shape (tuple[int,int]): Size of each tile in the grid
@@ -234,7 +233,8 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
         padding (int, optional):Padding between images in the grid. Defaults to 2 pixels.
         text_height (int, optional): Height of the text. Defaults to 12 pixels.
 
-    Returns:
+    Returns
+    -------
         torch.tensor: Tensor containing the grid.
     """
 
@@ -263,7 +263,8 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
 
 class PerfVisualizer:
     """Class for visualizing classification results in increasing order of the values returned 
-    by `perf_func`"""
+    by `perf_func`
+    """
 
     def __init__(self, dataset, model, perf_func, model_pred_func=None, device=None):
 
@@ -292,7 +293,6 @@ class PerfVisualizer:
         print_interv = max([round(print_interv_perc*num_samples/100), 1])
 
         perf_dict = {}
-        #print("allocated, allocated_bytes, segment, reserved_bytes, active, active_bytes")
         for idx, (img, label) in enumerate(self.dataset):
             if label.ndim>1 and label.sum()>label_thresh:
                 predb_acc = self.pred(img.unsqueeze(0), label.unsqueeze(0))

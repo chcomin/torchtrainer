@@ -1,4 +1,4 @@
-# A simple encoder decoder architecture that accepts any Pytorch resnet model
+"""A simple encoder decoder architecture that accepts any Pytorch resnet model"""
 from pathlib import Path
 
 import torch
@@ -7,6 +7,7 @@ from torch import nn
 
 
 def conv_norm(in_channels, out_channels, kernel_size=3, act=True):
+    """"conv-batchnorm-reul block."""
 
     layer = [
         nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, 
@@ -45,6 +46,7 @@ class DecoderBlock(nn.Module):
         return self.mix(y)
 
 class Decoder(nn.Module):
+    """Decode a list of features having distinct resolutions and number of channels."""
 
     def __init__(self, encoder_channels_list, decoder_channels):
         super().__init__()
@@ -79,6 +81,7 @@ class SimpleEncoderDecoder(nn.Module):
         self.classification = nn.Conv2d(decoder_channels, num_classes, 3, padding=1)
         
     def get_features(self, x):
+        """Extract the features from a ResNet encoder."""
         
         features = []
         re = self.resnet_encoder
@@ -100,6 +103,7 @@ class SimpleEncoderDecoder(nn.Module):
         return features
 
     def get_channels(self):
+        """Get the number of channels of the encoder features."""
 
         re = self.resnet_encoder
         training = re.training
@@ -128,6 +132,20 @@ class SimpleEncoderDecoder(nn.Module):
         return x
 
 def get_model(encoder_name="resnet18", decoder_channels=64, num_classes=2, weights_strategy=None):
+    """Get a SimpleEncoderDecoder model.
+    
+    Parameters
+    ----------
+    encoder_name
+        Name of the ResNet encoder to use. The encoder must be available in torch.hub.
+    decoder_channels
+        Number of channels to use in the decoder.
+    num_classes
+        Number of classes to predict.
+    weights_strategy
+        Strategy to load the weights. If "encoder" is passed, only the encoder weights will be 
+        loaded. If a string is passed, it is assumed to be a path to a checkpoint file.
+    """
 
     if weights_strategy=="encoder":
         # Load only encoder weights

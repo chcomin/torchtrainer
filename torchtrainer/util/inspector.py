@@ -8,7 +8,8 @@ import torch.nn as nn
 
 class Inspector:
     """Inspector class for capturing modules' parameters, gradients, activations and activation 
-    gradients."""
+    gradients.
+    """
     
     def __init__(self, model: nn.Module, modules_to_track: list[nn.Module] | None = None, 
                  agg_func: Callable | None = None, track_relu: bool = False) -> None:
@@ -209,7 +210,7 @@ class Inspector:
         """Add hooks to modules."""
 
         act_hook_handles = []
-        for module, _ in self.dict_module_to_str.items():
+        for module in self.dict_module_to_str:
             # Add one hook for each module
             handler_for = module.register_forward_hook(self.forward_hook)
             act_hook_handles.append(handler_for)
@@ -220,7 +221,7 @@ class Inspector:
         """Add hooks to modules."""
 
         act_grad_hook_handles = []
-        for module, _ in self.dict_module_to_str.items():
+        for module in self.dict_module_to_str:
             handler_back = module.register_full_backward_hook(self.backward_hook)
             act_grad_hook_handles.append(handler_back)
         
@@ -255,7 +256,8 @@ class Inspector:
     def _add_to_list(self, data: torch.Tensor, module_name: str, data_type: str) -> None:
         """Receives activation data and save to list in the cpu. If the 
         model is being trained on the GPU, `data` resides in the GPU.
-        `data_type can be 'act' or 'act_grad'."""
+        `data_type can be 'act' or 'act_grad'.
+        """
         
         model_acts = self.model_acts
         if data_type=="act":
@@ -274,7 +276,8 @@ class Inspector:
     def _add_to_dict_old(self, data: torch.Tensor, module_name: str, data_type: str) -> None:
         """Receives activation data and save to dictionary in the cpu. If the 
         model is being trained on the GPU, `data` resides in the GPU.
-        `data_type can be 'act' or 'act_grad'."""
+        `data_type can be 'act' or 'act_grad'.
+        """
         
         list_model_stats = self.list_model_stats
         saved_data = list_model_stats[module_name][data_type]
@@ -316,23 +319,24 @@ def agg_func_stats(data, module_name, data_type, param_name=None):
     return res
 
 def flatten_data(data: dict) -> tuple[torch.Tensor, torch.Tensor]:
+    """Flatten data from a dictionary of dictionaries"""
 
     num_el = 0
-    for _, module_data in data.items():
+    for _, module_data in data.values():
         if isinstance(module_data, torch.Tensor):
             num_el += module_data.numel()
         else:
-            for _, param_data in module_data.items():
+            for _, param_data in module_data.values():
                 num_el += param_data.numel()
 
     flattened_data = torch.zeros(num_el)
     idx = 0
-    for _, module_data in data.items():
+    for _, module_data in data.values():
         if isinstance(module_data, torch.Tensor):
             num_el = module_data.numel()
             flattened_data[idx:idx+num_el] = module_data.view(-1)
         else:
-            for _, param_data in module_data.items():
+            for _, param_data in module_data.values():
                 num_el = param_data.numel()
                 flattened_data[idx:idx+num_el] = param_data.view(-1)  
 

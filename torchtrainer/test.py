@@ -1,3 +1,8 @@
+"""
+Reference script to test a trained model.
+Please refer to the get_parser function to see the available arguments.
+"""
+
 import argparse
 import shutil
 from pathlib import Path
@@ -16,6 +21,9 @@ from torchtrainer.util.train_util import ParseKwargs, WrapDict, dict_to_argv, se
 
 @torch.no_grad()
 def test(param_dict=None):
+    """Test a trained model. Please refer to the get_parser function to 
+    see the available arguments.
+    """
 
     args = get_args(param_dict)
 
@@ -194,6 +202,7 @@ def get_args(param_dict: dict | None = None) -> argparse.Namespace:
     return args
 
 def get_parser() -> argparse.ArgumentParser:
+    """Get the argument parser for the `test` function."""
 
     parser = argparse.ArgumentParser()
 

@@ -1,16 +1,16 @@
-# Model from the Little wnet paper
+""" Model from the Little wnet paper."""
 import torch
 import torch.nn as nn
 
 
-def conv1x1(in_planes, out_planes, stride=1):
+def conv1x1(in_planes, out_planes, stride=1):  # noqa: D103
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 class ConvBlock(torch.nn.Module):
+    """Residual block"""
+
     def __init__(self, in_c, out_c, k_sz=3, shortcut=False, pool=True):
-        """
-        pool_mode can be False (no pooling) or True ('maxpool')
-        """
+        """pool_mode can be False (no pooling) or True ('maxpool')"""
         super().__init__()
         if shortcut: 
             self.shortcut = nn.Sequential(conv1x1(in_c, out_c), nn.BatchNorm2d(out_c))
@@ -43,6 +43,8 @@ class ConvBlock(torch.nn.Module):
             return out
 
 class UpsampleBlock(torch.nn.Module):
+    """Upsample input using transpose convolution or interpolation."""
+
     def __init__(self, in_c, out_c, up_mode="transp_conv"):
         super().__init__()
         block = []
@@ -61,6 +63,8 @@ class UpsampleBlock(torch.nn.Module):
         return out
 
 class ConvBridgeBlock(torch.nn.Module):
+    """Conv-ReLU-Batch Norm block"""
+
     def __init__(self, channels, k_sz=3):
         super().__init__()
         pad = (k_sz - 1) // 2
@@ -77,6 +81,8 @@ class ConvBridgeBlock(torch.nn.Module):
         return out
 
 class UpConvBlock(torch.nn.Module):
+    """Upsampling block with a convolutional bridge."""
+
     def __init__(self, in_c, out_c, k_sz=3, up_mode="up_conv", conv_bridge=False, shortcut=False):
         super().__init__()
         self.conv_bridge = conv_bridge
@@ -96,6 +102,11 @@ class UpConvBlock(torch.nn.Module):
         return out
 
 class UNetLW(nn.Module):
+    """U-Net model from the paper
+    State-of-the-art retinal vessel segmentation with minimalistic models
+    https://www.nature.com/articles/s41598-022-09675-y
+    """
+
     def __init__(
             self, 
             in_c, 
@@ -146,6 +157,7 @@ class UNetLW(nn.Module):
         return self.final(x)
     
 def get_model(layers=(8, 16, 32), k_sz=3, num_channels=1, num_classes=2):
+    """Get the model."""
 
     model = UNetLW(in_c=num_channels, n_classes=num_classes, layers=layers, k_sz=k_sz)
 

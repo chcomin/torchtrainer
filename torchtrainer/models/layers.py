@@ -1,4 +1,4 @@
-"Some useful neural net layers"
+"""Some useful neural net layers"""
 
 from collections.abc import Iterable
 
@@ -113,7 +113,8 @@ class Upsample(nn.Module):
 
 class Interpolate(nn.Module):
     """Layer that receives two inputs when called: x and output_shape. The layer interpolates the 
-    input to the desired output."""
+    input to the desired output.
+    """
 
     def __init__(self, mode="nearest"):
         super().__init__()
@@ -146,6 +147,9 @@ class InterpolateConv(nn.Module):
         return res
 
 class InterpolateGrid(nn.Module):
+    """Interpolate tensor using half pixel shifts, which preserves the position of the 
+    receptive field.
+    """
 
     def __init__(self, mode="nearest"):
         super().__init__()
@@ -158,7 +162,8 @@ def interpolate_grid_sample(
         input, size=None, scale_factor=None, mode="nearest", half_r=True, half_c=True
         ):
     """Interpolate tensor using half pixel shifts, which preserves the position of the 
-    receptive field."""
+    receptive field.
+    """
 
     if size is None and scale_factor is None:
         raise ValueError("Either size os scale_factor must be given")
@@ -192,7 +197,8 @@ def interpolate_grid_sample(
     return res
 
 class SE_Block(nn.Module):
-    "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
+    """credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"""
+
     def __init__(self, c, r=16):
         super().__init__()
         self.squeeze = nn.AdaptiveAvgPool2d(1)
@@ -224,6 +230,7 @@ class Concat(nn.Module):
         return torch.cat((x1, x2), self.concat_dim)
 
     def fix_shape(self, x1, x2):
+        """Interpolate x2 to the shape of x1."""
 
         x2 = F.interpolate(x2, x1.shape[self.concat_dim+1:], mode="nearest")
 
@@ -232,18 +239,6 @@ class Concat(nn.Module):
     def extra_repr(self):
         s = "concat_dim={concat_dim}"
         return s.format(**self.__dict__)
-
-class Blur(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-
-        self.pad = nn.ReplicationPad2d((0,1,0,1))
-        self.blur = nn.AvgPool2d(2, stride=1)
-
-    def forward(self, x):
-
-        return self.blur(self.pad(x))
 
 class Conv2dCH(nn.Module):
     """Create 2D cross-hair convolution filter. Parameters are the same as torch.nn.Conv2d, with 
@@ -330,7 +325,6 @@ class Conv2dCH(nn.Module):
                     module.bias.data.zero_()"""
 
 class Conv3dCH(nn.Module):
-
     """Create 3D cross-hair convolution filter. Parameters are the same as torch.nn.Conv3d, with 
     the exception that padding must be larger than or equal to (kernel_size-1)//2 (otherwise the 
     filter would need negative padding to properly work) and dilation is not supported. Also, if 

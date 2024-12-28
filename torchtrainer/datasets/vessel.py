@@ -1,5 +1,6 @@
 """The objective of the dataset classes here is to provide the minimal code to load the
-images from the respective datasets. """
+images from the respective datasets.
+"""
 
 import random
 from pathlib import Path
@@ -14,6 +15,7 @@ from ..util.train_util import Subset
 
 
 class TrainTransforms:
+    """Lightweight training transform for vessel datasets."""
 
     def __init__(self, resize_size, resize_target = True):
 
@@ -58,6 +60,7 @@ class TrainTransforms:
         return img, target
 
 class ValidTransforms:
+    """Validation transform that only resizes the image."""
 
     def __init__(self, resize_size = None, resize_target = True):
         self.resize_size = resize_size
@@ -88,6 +91,7 @@ def get_dataset_drive_train(
         use_ignore_index=True
         ):
     """Get the DRIVE dataset for training.
+
     Parameters
     ----------
     dataset_path
@@ -160,6 +164,7 @@ def get_dataset_drive_test(
         use_ignore_index=True
         ):
     """Get the DRIVE dataset used for training and test.
+
     Parameters
     ----------
     dataset_path
@@ -210,6 +215,7 @@ def get_dataset_vessmap_train(
         resize_size=(256, 256), 
         ):
     """Get the VessMAP dataset for training.
+
     Parameters
     ----------
     dataset_path

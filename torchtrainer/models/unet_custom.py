@@ -26,6 +26,8 @@ class UNetCustom(nn.Module):
         Number of channels of the input image.
     num_classes : int
         Number of classes for the output.
+    upsample_strategy : str
+        Strategy for upsampling. Options are "conv_transpose", "interpolation" or "grid". 
     zero_init_residual : bool
         If True, initializes each residual block so that the non-residual path outputs 0. 
         That is, at the beginning, the residual block acts as an identity layer.
@@ -160,12 +162,12 @@ class UNetCustom(nn.Module):
         x = self.stage_input(x)
 
         down_samples = ()
-        for _, stage in self.encoder.items():
+        for _, stage in self.encoder.values():
             down_samples += (x,)
             x = stage(x)
 
         if return_acts:
-            acts = down_samples + (x,)
+            acts = (*down_samples, x)
 
         down_samples = down_samples[::-1]
         for (_, stage), sample in zip(self.decoder.items(), down_samples):
@@ -198,9 +200,7 @@ class DeepSupervision:
     def __init__(self, model):
 
         module_names = get_main_resunet_modules(model, depth=2)
-        modules = []
-        for name in module_names:
-            modules.append(model.get_submodule(name))
+        modules = [model.get_submodule(name) for name in module_names]
         hooks = self.attach_hooks(modules)
 
         self.model = model
@@ -219,9 +219,7 @@ class DeepSupervision:
     def attach_hooks(self, modules):
         """Attach forward hooks to a list of modules to get activations."""
 
-        hooks = []
-        for module in modules:
-            hooks.append(Hook(module))
+        hooks = [Hook(module) for module in modules]
 
         return hooks
 
@@ -233,22 +231,23 @@ class DeepSupervision:
 def get_main_resunet_modules(model, depth=1, include_decoder=True):
     """Get main layers of the ResUNet model.
 
-    Args:
+    Parameters
+    ----------
         model (torch.nn.Module): The model.
         depth (int): When depth=1, each stage of the encoder and decoder is returned.
         When depth=2, all residual blocks of the model are returned.
 
-    Returns:
+    Returns
+    -------
         list: List of modules
     """
 
     module_names = ["stage_input"]
     if depth==1:
-        for name in model.encoder:
-            module_names.append(f"encoder.{name}")
+        module_names.extend([f"encoder.{name}" for name in model.encoder])
         if include_decoder:
-            for name in model.decoder:
-                module_names.append(f"decoder.{name}.2")
+            module_names.extend(f"decoder.{name}.2" for name in model.decoder)
+
     elif depth==2:
         from torchtrainer.models.layers import BasicBlock
         for name, module in model.named_modules():
@@ -268,6 +267,9 @@ def get_model(
         num_classes=2, 
         weights_strategy=None
         ):
+    """Get a UNetCustom model. See the class documentation for more information 
+    on the parameters.
+    """
 
     model = UNetCustom(blocks_per_encoder_stage, blocks_per_decoder_stage, channels_per_stage, 
                        num_channels, num_classes)

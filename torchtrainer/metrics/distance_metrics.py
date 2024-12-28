@@ -1,5 +1,5 @@
 # Copyright 2018 Google Inc. All Rights Reserved.
-"""This script was adapted from Deepmind's repository
+"""These metrics script was adapted from Deepmind's repository
 https://github.com/google-deepmind/surface-distance/tree/master
 by Cesar Comin
 """
@@ -110,11 +110,13 @@ def _compute_bounding_box(mask):
   This function generalizes to arbitrary number of dimensions great or equal
   to 1.
 
-  Args:
+  Parameters
+  ----------
     mask: The 2D or 3D numpy mask, where '0' means background and non-zero means
       foreground.
 
-  Returns:
+  Returns
+  -------
     A tuple:
      - The coordinates of the first point of the bounding box (smallest on all
        axes), or `None` if the mask contains only zeros.
@@ -175,11 +177,13 @@ def _crop_to_bounding_box(mask, bbox_min, bbox_max):
 def _sort_distances_surfels(distances, surfel_areas):
   """Sorts the two list with respect to the tuple of (distance, surfel_area).
 
-  Args:
+  Parameters
+  ----------
     distances: The distances from A to B (e.g. `distances_gt_to_pred`).
     surfel_areas: The surfel areas for A (e.g. `surfel_areas_gt`).
 
-  Returns:
+  Returns
+  -------
     A tuple of the sorted (distances, surfel_areas).
   """
   sorted_surfels = np.array(sorted(zip(distances, surfel_areas)))
@@ -205,13 +209,15 @@ def compute_surface_distances(mask_gt,
   of the masks is empty, the corresponding lists are empty and all distances in
   the other list are `inf`.
 
-  Args:
+  Parameters
+  ----------
     mask_gt: 2-dim (resp. 3-dim) bool Numpy array. The ground truth mask.
     mask_pred: 2-dim (resp. 3-dim) bool Numpy array. The predicted mask.
     spacing_mm: 2-element (resp. 3-element) list-like structure. Voxel spacing
       in x0 anx x1 (resp. x0, x1 and x2) directions.
 
-  Returns:
+  Returns
+  -------
     A dict with:
     "distances_gt_to_pred": 1-dim numpy array of type float. The distances in mm
         from all ground truth surface elements to the predicted surface,
@@ -226,7 +232,8 @@ def compute_surface_distances(mask_gt,
       of the predicted contours in mm (resp. the surface elements area in
       mm^2) in the same order as distances_gt_to_pred.
 
-  Raises:
+  Raises
+  ------
     ValueError: If the masks and the `spacing_mm` arguments are of incompatible
       shape or type. Or if the masks are not 2D or 3D.
   """
@@ -301,13 +308,13 @@ def compute_surface_distances(mask_gt,
     distmap_gt = ndimage.morphology.distance_transform_edt(
         ~borders_gt, sampling=spacing_mm)
   else:
-    distmap_gt = np.Inf * np.ones(borders_gt.shape)
+    distmap_gt = np.inf * np.ones(borders_gt.shape)
 
   if borders_pred.any():
     distmap_pred = ndimage.morphology.distance_transform_edt(
         ~borders_pred, sampling=spacing_mm)
   else:
-    distmap_pred = np.Inf * np.ones(borders_pred.shape)
+    distmap_pred = np.inf * np.ones(borders_pred.shape)
 
   # compute the area of each surface element
   surface_area_map_gt = neighbour_code_to_surface_area[neighbour_code_map_gt]
@@ -344,12 +351,14 @@ def compute_average_surface_distance(surface_distances):
   surface element into account. Call compute_surface_distances(...) before, to
   obtain the `surface_distances` dict.
 
-  Args:
+  Parameters
+  ----------
     surface_distances: dict with "distances_gt_to_pred", "distances_pred_to_gt"
     "surfel_areas_gt", "surfel_areas_pred" created by
     compute_surface_distances()
 
-  Returns:
+  Returns
+  -------
     A tuple with two float values:
       - the average distance (in mm) from the ground truth surface to the
         predicted surface
@@ -376,13 +385,15 @@ def compute_robust_hausdorff(surface_distances, percent):
   percentage is computed by correctly taking the area of each surface element
   into account.
 
-  Args:
+  Parameters
+  ----------
     surface_distances: dict with "distances_gt_to_pred", "distances_pred_to_gt"
       "surfel_areas_gt", "surfel_areas_pred" created by
       compute_surface_distances()
     percent: a float value between 0 and 100.
 
-  Returns:
+  Returns
+  -------
     a float value. The robust Hausdorff distance in mm.
   """
   distances_gt_to_pred = surface_distances["distances_gt_to_pred"]
@@ -395,7 +406,7 @@ def compute_robust_hausdorff(surface_distances, percent):
     perc_distance_gt_to_pred = distances_gt_to_pred[
         min(idx, len(distances_gt_to_pred)-1)]
   else:
-    perc_distance_gt_to_pred = np.Inf
+    perc_distance_gt_to_pred = np.inf
 
   if len(distances_pred_to_gt) > 0:  # pylint: disable=g-explicit-length-test
     surfel_areas_cum_pred = (np.cumsum(surfel_areas_pred) /
@@ -404,7 +415,7 @@ def compute_robust_hausdorff(surface_distances, percent):
     perc_distance_pred_to_gt = distances_pred_to_gt[
         min(idx, len(distances_pred_to_gt)-1)]
   else:
-    perc_distance_pred_to_gt = np.Inf
+    perc_distance_pred_to_gt = np.inf
 
   return max(perc_distance_gt_to_pred, perc_distance_pred_to_gt)
 
@@ -417,13 +428,15 @@ def compute_surface_overlap_at_tolerance(surface_distances, tolerance_mm):
   distance that is regarded as overlapping). The overlapping fraction is
   computed by correctly taking the area of each surface element into account.
 
-  Args:
+  Parameters
+  ----------
     surface_distances: dict with "distances_gt_to_pred", "distances_pred_to_gt"
       "surfel_areas_gt", "surfel_areas_pred" created by
       compute_surface_distances()
     tolerance_mm: a float value. The tolerance in mm
 
-  Returns:
+  Returns
+  -------
     A tuple of two float values. The overlap fraction in [0.0, 1.0] of the
     ground truth surface with the predicted surface and vice versa.
   """
@@ -450,13 +463,15 @@ def compute_surface_dice_at_tolerance(surface_distances, tolerance_mm):
   the other surface is less or equal to the specified tolerance. The DICE
   coefficient is in the range between 0.0 (no overlap) to 1.0 (perfect overlap).
 
-  Args:
+  Parameters
+  ----------
     surface_distances: dict with "distances_gt_to_pred", "distances_pred_to_gt"
       "surfel_areas_gt", "surfel_areas_pred" created by
       compute_surface_distances()
     tolerance_mm: a float value. The tolerance in mm
 
-  Returns:
+  Returns
+  -------
     A float value. The surface DICE coefficient in [0.0, 1.0].
   """
   distances_gt_to_pred = surface_distances["distances_gt_to_pred"]

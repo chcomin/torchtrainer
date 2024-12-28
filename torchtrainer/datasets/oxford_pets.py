@@ -1,3 +1,5 @@
+"""Oxford Pets segmentation dataset."""
+
 import random
 from pathlib import Path
 
@@ -12,7 +14,7 @@ from ..util.train_util import Subset
 
 
 class OxfordIIITPetSeg(Dataset):
-    """Oxford Pets segmentation dataset."""
+    """Main class for loading the Oxford Pets segmentation dataset."""
 
     def __init__(self, root, transforms=None, ignore_val=2):
         """
@@ -71,6 +73,7 @@ class OxfordIIITPetSeg(Dataset):
         return len(self.images)
 
 class TransformsTrain:
+    """Transforms for training."""
 
     def __init__(self, resize_size=(384, 384)):
     
@@ -96,6 +99,7 @@ class TransformsTrain:
         return img, target
 
 class TransformsEval:
+    """Transforms for evaluation."""
 
     def __init__(self, resize_size=(384, 384)):
 
@@ -126,6 +130,7 @@ def cat_list(images, fill_value=0):
         List of images
     fill_value, optional
        How to pad the images
+       
     Returns
     -------
         Batched images as a tensor
@@ -151,6 +156,7 @@ def cat_list(images, fill_value=0):
     return batched_imgs
 
 def collate_fn(batch, img_fill=0, target_fill=2):
+    """Collate function to use in the dataloader."""
 
     images, targets = list(zip(*batch))
     batched_imgs = cat_list(images, fill_value=img_fill)
@@ -159,6 +165,8 @@ def collate_fn(batch, img_fill=0, target_fill=2):
     return batched_imgs, batched_targets
 
 def unormalize(img):
+    """Invert the normalization applied to the images."""
+
     img = img.permute(1, 2, 0)
     mean = torch.tensor([122.7, 114.6, 100.9])
     std = torch.tensor([59.2, 58.4, 59.0])
@@ -168,6 +176,7 @@ def unormalize(img):
     return img
 
 def get_dataset(dataset_path, split=0.2, resize_size=(384, 384)):
+    """Get the Oxford Pets segmentation dataset."""
 
     ds = OxfordIIITPetSeg(dataset_path)
     n = len(ds)
