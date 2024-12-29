@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from torchtrainer.metrics.confusion_metrics import ConfusionMatrixMetrics
+from torchtrainer.util.profiling import Profiler
 from torchtrainer.util.train_util import (
     Logger,
     LoggerPlotter,
@@ -36,8 +37,6 @@ except ImportError:
     has_wandb = False
 else:
     has_wandb = True
-
-# TODO: profiling
 
 class DefaultModuleRunner:
     """ Class to train, validate and test PyTorch models."""
@@ -67,39 +66,54 @@ class DefaultModuleRunner:
          self.model = model
 
     def add_training_elements(self, dl_train, dl_valid, optim, scheduler,
-                              scaler, device):
+                              scaler, profiler, device):
         self.dl_train = dl_train
         self.dl_valid = dl_valid
         self.optim = optim
         self.scheduler = scheduler
         self.scaler = scaler
+        self.profiler = profiler
         self.device = device
      
     def train_one_epoch(self, epoch: int):
 
         self.model.train()
         scaler = self.scaler
+        profiler = self.profiler
+        # We need to create an iterator for the dataloader in order to profile the data loading
+        dl_iter = iter(self.dl_train)
 
         pbar = tqdm(
-            self.dl_train,
+            range(len(self.dl_train)),
             desc="Training",
             leave=False,
             unit="batchs",
             dynamic_ncols=True,
             colour="blue",
         )
-        for batch_idx, (imgs, targets) in enumerate(pbar):
+        if epoch==1:
+            # This is a noop if --profile was not set in the commandline
+            profiler.start("train")
+            
+        for batch_idx in pbar:
+            with profiler.section(f"data_{batch_idx}"):
+                imgs, targets = next(dl_iter)
+
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
-            self.optim.zero_grad()
-            with torch.autocast(device_type=self.device, enabled=scaler.is_enabled()):
-                scores = self.model(imgs)
-                loss = self.loss_func(scores, targets)
-            
-            scaler.scale(loss).backward()
-            scaler.step(self.optim)
-            scaler.update()
 
+            with profiler.section(f"forward_{batch_idx}"):
+                self.optim.zero_grad()
+                with torch.autocast(device_type=self.device, enabled=scaler.is_enabled()):
+                    scores = self.model(imgs)
+                    loss = self.loss_func(scores, targets)
+                
+            with profiler.section(f"backward_{batch_idx}"):
+                scaler.scale(loss).backward()
+                scaler.step(self.optim)
+                scaler.update()
+
+            profiler.step()
             self.logger.log(epoch, batch_idx, "Train loss", loss.detach(), imgs.shape[0])
 
         # Log learning rate
@@ -110,28 +124,41 @@ class DefaultModuleRunner:
     def validate_one_epoch(self, epoch: int):
 
         self.model.eval()
+        profiler = self.profiler
+        dl_iter = iter(self.dl_valid)
 
         pbar = tqdm(
-            self.dl_valid,
+            range(len(self.dl_valid)),
             desc="Validating",
             leave=False,
             unit="batchs",
             dynamic_ncols=True,
             colour="green",
         )    
-        for batch_idx, (imgs, targets) in enumerate(pbar):
+        if epoch==1:
+            profiler.start("validation")
+
+        for batch_idx in pbar:
+            with profiler.section(f"data_{batch_idx}"):
+                imgs, targets = next(dl_iter)
+
             imgs = imgs.to(self.device)
             targets = targets.to(self.device)
-            scores = self.model(imgs)
-            loss = self.loss_func(scores, targets)
 
-            self.logger.log(epoch, batch_idx, "Validation loss", loss, imgs.shape[0])
-            for perf_func in self.perf_funcs:
-                # Apply performance metric function
-                results = perf_func(scores, targets)
-                # Iterate over the results and log them
-                for name, value in results.items():
-                    self.logger.log(epoch, batch_idx, name, value, imgs.shape[0])
+            with profiler.section(f"forward_{batch_idx}"):
+                scores = self.model(imgs)
+                loss = self.loss_func(scores, targets)
+
+            with profiler.section(f"metrics_{batch_idx}"):
+                self.logger.log(epoch, batch_idx, "Validation loss", loss, imgs.shape[0])
+                for perf_func in self.perf_funcs:
+                    # Apply performance metric function
+                    results = perf_func(scores, targets)
+                    # Iterate over the results and log them
+                    for name, value in results.items():
+                        self.logger.log(epoch, batch_idx, name, value, imgs.shape[0])
+
+            profiler.step()
     
     @torch.no_grad()
     def predict(self, batch):
@@ -479,17 +506,28 @@ class DefaultTrainer:
 
         # Do a sanity check on the validation dataloader
         try:
-           batch = next(iter(dl_valid))
+           imgs, targets = next(iter(dl_valid))
         except Exception as e:
             print("The following problem was detected on the validation dataloader:")
             raise e
 
         # Do a sanity check on the model
         try:
-            model(batch[0].to(device))
+            with torch.no_grad():
+                scores = model(imgs.to(device))
         except Exception as e:
             print(
                 "The following error happened when applying the model to the validation batch:"
+            )
+            raise e
+        
+        # Do a sanity check on the performance functions
+        try:
+            for perf_func in module_runner.perf_funcs:
+                perf_func(scores, targets.to(device))
+        except Exception as e:
+            print(
+                "The following error happened when applying the performance functions:"
             )
             raise e
         
@@ -510,8 +548,20 @@ class DefaultTrainer:
 
         scaler = torch.GradScaler(device=device, enabled=args.use_amp)
             
+        if args.profile:
+            # If profiling is enabled, only run for two epochs
+            args.num_epochs = 2
+        profiler = Profiler(
+            num_steps = args.profile_batches,
+            include_cuda = "cuda" in args.device, 
+            trace_path=self.run_path,
+            record_shapes = args.profile_verbosity>0,
+            with_stack = args.profile_verbosity>1,
+            enabled = args.profile, 
+            )
+
         self.module_runner.add_training_elements(dl_train, dl_valid, optim, scheduler, 
-                                                 scaler, args.device)
+                                                 scaler, profiler, device)
 
     def fit(self):
         """Start the training loop."""
@@ -764,6 +814,17 @@ class DefaultTrainer:
                            help="If deterministic algorithms should be used")
         group.add_argument("--benchmark", action="store_true", 
                            help="If cuda benchmark should be used")
+        group.add_argument("--profile", action="store_true", 
+                           help="If set, enable the profile mode. This will run the training loop "
+                                "for two epochs and create train.json and validation.json files."
+                                "The files can be opened in https://ui.perfetto.dev/")
+        group.add_argument("--profile_batches", type=int, default=3, metavar="N", 
+                           help="Number of batches to profile if --profile is set. Note that there "
+                                "must be at least profile_batches+2 batches in an epoch for the "
+                                "profile to work correctly")
+        group.add_argument("--profile_verbosity", type=int, default=0, metavar="N", 
+                           help="If set to 1, the profile will record tensor shapes. If set to 2, "
+                                "it will also record stack traces")
 
         return parser, config_parser
 
