@@ -320,6 +320,8 @@ def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
     if positional_args is None:
         positional_args = []
 
+    param_dict = param_dict.copy()
+
     sys_argv = []
     # Extract positional arguments and put them first
     for k in positional_args:
