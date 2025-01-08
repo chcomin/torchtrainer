@@ -138,14 +138,22 @@ def get_dataset_drive_train(
         indices = list(range(n))
         random.shuffle(indices)
         
+        indices_train = indices[n_valid:]
         class_atts = {
-            "images":ds.images[n_valid:], "labels":ds.labels[n_valid:], "classes":ds.classes
+            "images":[ds.images[idx] for idx in indices_train], 
+            "labels":[ds.labels[idx] for idx in indices_train], 
+            "classes":ds.classes
         }
-        ds_train = Subset(ds, indices[n_valid:], **class_atts)
+        ds_train = Subset(ds, indices_train, **class_atts)
+
+
+        indices_valid = indices[:n_valid]
         class_atts = {
-            "images":ds.images[:n_valid], "labels":ds.labels[:n_valid], "classes":ds.classes
+            "images":[ds.images[idx] for idx in indices_valid], 
+            "labels":[ds.labels[idx] for idx in indices_valid], 
+            "classes":ds.classes
         }
-        ds_valid = Subset(ds, indices[:n_valid], **class_atts)
+        ds_valid = Subset(ds, indices_valid, **class_atts)
 
     elif split_strategy=="valid_test":
         ds_train = DRIVE(dataset_path, split="train", **drive_params)
@@ -243,14 +251,21 @@ def get_dataset_vessmap_train(
         indices = list(range(n))
         random.shuffle(indices)
         
+        indices_train = indices[n_valid:]
         class_atts = {
-            "images":ds.images[n_valid:], "labels":ds.labels[n_valid:], "classes":ds.classes
+            "images":[ds.images[idx] for idx in indices_train], 
+            "labels":[ds.labels[idx] for idx in indices_train], 
+            "classes":ds.classes
         }
-        ds_train = Subset(ds, indices[n_valid:], **class_atts)
+        ds_train = Subset(ds, indices_train, **class_atts)
+
+        indices_valid = indices[:n_valid]
         class_atts = {
-            "images":ds.images[:n_valid], "labels":ds.labels[:n_valid], "classes":ds.classes
+            "images":[ds.images[idx] for idx in indices_valid], 
+            "labels":[ds.labels[idx] for idx in indices_valid], 
+            "classes":ds.classes
         }
-        ds_valid = Subset(ds, indices[:n_valid], **class_atts)
+        ds_valid = Subset(ds, indices_valid, **class_atts)
 
     elif split_strategy=="file":
         with open(dataset_path/"train.csv") as file:
