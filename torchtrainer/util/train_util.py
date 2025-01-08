@@ -176,7 +176,7 @@ class LoggerPlotter:
             for name in names:
                 values = df[name]
                 # Mask nan values
-                mask = np.isfinite(values)
+                mask = values.notna()
                 ax.plot(epochs[mask], values[mask], "-o", ms=2, label=name)
             ax.set_xlabel("Epoch")
             ax.legend()
@@ -415,6 +415,18 @@ def save_params(store):
             
         return func
     return func_caller
+
+def to_csv_nan(df, path):
+    """Save a dataframe to a csv file with nan values.
+    
+    A dataframe may have nan values and NA values, the latter represents missing values. A call
+    do df.to_csv(path) will save both nan and NA values as "". This function allows saving nan
+    values as "nan" and NA values as "".
+    """
+
+    df_str = df.astype(str)
+    df_str[df_str=="<NA>"] = ""
+    df_str.to_csv(path, index=False)
 
 def setup_wandb(args, run_path):
     """Setup wandb for logging experiments."""

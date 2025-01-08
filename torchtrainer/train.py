@@ -29,6 +29,7 @@ from torchtrainer.util.train_util import (
     seed_all,
     seed_worker,
     setup_wandb,
+    to_csv_nan,
 )
 
 try:
@@ -611,7 +612,7 @@ class DefaultTrainer:
                 pbar.set_postfix(last_metrics[tqdm_metrics].to_dict()) 
 
                 # Save logged data
-                logger_data.to_csv(run_path/"log.csv", index=False)
+                to_csv_nan(logger_data, run_path/"log.csv")
                 # Save plot of logged data
                 logger_plotter.get_plot(logger).savefig(run_path/"plots.png")
 
