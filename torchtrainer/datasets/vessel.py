@@ -258,7 +258,7 @@ def get_dataset_vessmap_train(
         with open(dataset_path/"val.csv") as file:
             files_valid = file.read().splitlines()
         ds_train = VessMAP(dataset_path, keepdim=True, files=files_train)
-        ds_valid = DRIVE(dataset_path, keepdim=True, files=files_valid)
+        ds_valid = VessMAP(dataset_path, keepdim=True, files=files_valid)
 
     ds_train.transforms = TrainTransforms(resize_size)
     ds_valid.transforms = ValidTransforms(resize_size)

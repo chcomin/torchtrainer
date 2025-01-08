@@ -205,7 +205,7 @@ class DefaultTrainer:
         
         1. Do not include "--" before parameter names. 
         2. All values except single int or float numbers should be strings.
-        3. The value of boolean parameters should be an empty string, e.g. 'bool-par': ''.
+        3. The value of boolean parameters should be an empty string, e.g. "bool-par": "".
         4. In general, values with spaces are invalid since arguments are split by spaces.
            The only exceptions are arguments with nargs set in the parser.
 
