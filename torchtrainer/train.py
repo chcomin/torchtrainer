@@ -6,6 +6,7 @@ Please see the DefaultTrainer class for more information on how to use this scri
 import argparse
 import operator
 import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from torchtrainer.util.train_util import (
     ParseText,
     WrapDict,
     dict_to_argv,
+    exit,
     predict_and_save_val_imgs,
     seed_all,
     seed_worker,
@@ -91,6 +93,7 @@ class DefaultModuleRunner:
             unit="batchs",
             dynamic_ncols=True,
             colour="blue",
+            disable=self.args.disable_tqdm,
         )
         if epoch==1:
             # This is a noop if --profile was not set in the commandline
@@ -135,6 +138,7 @@ class DefaultModuleRunner:
             unit="batchs",
             dynamic_ncols=True,
             colour="green",
+            disable=self.args.disable_tqdm,
         )    
         if epoch==1:
             profiler.start("validation")
@@ -243,10 +247,14 @@ class DefaultTrainer:
         experiment_path = Path(experiments_path)/experiment_name
         run_path = experiment_path/run_name
         if Path.exists(run_path):
-            run_name_new = input("Run path already exists. Press enter to overwrite or write "
-                                 "the name of the run: ")
-            if run_name_new.strip():
-                run_path = experiment_path/run_name_new
+            run_name_new = input(f"Run {run_name} already exists. Press enter to overwrite, write "
+                                  "'exit' to cancel or write a new name for the run: ")
+            run_name_new = run_name_new.strip()
+            if run_name_new:  # If the user wrote something
+                if run_name_new=="exit":
+                    exit()
+                else:
+                    run_path = experiment_path/run_name_new
                 args.run_name = run_name_new
             else:
                 shutil.rmtree(run_path)
@@ -276,6 +284,8 @@ class DefaultTrainer:
             if not has_wandb:
                 raise ImportError("wandb is not installed")
             setup_wandb(args, run_path)
+
+        self.module_runner.args = args
 
     def get_dataset(
             self, 
@@ -591,6 +601,7 @@ class DefaultTrainer:
             unit="epochs",
             dynamic_ncols=True,
             colour="blue",
+            disable=args.disable_tqdm,
         )
         try:
             for epoch in pbar:
@@ -735,6 +746,8 @@ class DefaultTrainer:
                                 'you login to wandb by running "wandb login" in the terminal.') 
         group.add_argument("--wandb_project", default="uncategorized", 
                            help="Name of the wandb project to log the data.")
+        group.add_argument("--disable_tqdm", action="store_true", 
+                           help="Disable tqdm progressbar.")
         parser.add_argument("--meta", default="", nargs="*", action=ParseText, 
                             help="Additional metadata to save in the config.json file describing "
                                  "the experiment. Whitespaces do not need to be escaped.")

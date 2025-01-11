@@ -7,12 +7,13 @@ import inspect
 import math
 import os
 import random
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from IPython import display
+from IPython import display, get_ipython
 from PIL import Image
 from torch.optim import lr_scheduler
 from torch.utils.data import Dataset
@@ -467,6 +468,24 @@ def setup_wandb(args, run_path):
         # track hyperparameters and run metadata
         config=args
     )
+
+def exit(msg="Execução encerrada"):
+    """Exit the program if executed from the commandline or in Jupyter."""
+
+    class StopExecution(Exception):
+        """Avoid printing error information"""
+
+        def _render_traceback_(self):
+            return []
+    # Ugly hack to change the name of the exception
+    StopExecution.__name__ = msg
+
+    if get_ipython():    
+        raise StopExecution
+    else:
+        print(msg)
+        sys.exit()
+
 
 class CosineAnnealingWarmRestartsImp(lr_scheduler.CosineAnnealingWarmRestarts):
     """Exactly the same as the class CosineAnnealingWarmRestarts from Pytorch with a fix for 
