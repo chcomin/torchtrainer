@@ -73,7 +73,7 @@ class DistanceMetrics:
           raise ValueError(f"Target has {targets.ndim-1} dimensions but spacing "
                            "has {len(self.spacing)} elements")
       
-        preds = logits_to_preds(scores, return_indices=True)
+        preds = logits_to_preds(scores, return_indices=True, keepdim=False)
         preds = preds.cpu().numpy()>0
         targets = targets.cpu().numpy()>0
 
