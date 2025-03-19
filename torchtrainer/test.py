@@ -81,7 +81,7 @@ def test(param_dict=None):
 
         model = TestSegmentation(num_channels=num_channels, num_classes=num_classes)
 
-    checkpoint = torch.load(run_path/"best_model.pt", weights_only=True)
+    checkpoint = torch.load(run_path/"best_model.pt", weights_only=False)
     model.load_state_dict(checkpoint["model"])
     model.to(device)
     model.eval()
