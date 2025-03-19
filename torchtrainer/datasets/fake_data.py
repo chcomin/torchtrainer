@@ -25,7 +25,7 @@ class FakeClassificationData(Dataset):
         img_disk[inds] = 255
         img_disk = img_disk.tile((3,1,1)).permute(1, 2, 0)
 
-        self.imgs = [img_square, img_disk]
+        self.imgs = [img_square.numpy(), img_disk.numpy()]
         self.n_samples = n_samples
         self.transforms = transforms
 
@@ -58,8 +58,8 @@ class Transforms:
 
     def __call__(self, img, target):
         
-        img = img.permute(2, 0, 1).float()/255
-        target = target.to(torch.int64)
+        img = torch.from_numpy(img).permute(2, 0, 1).float()/255
+        target = torch.from_numpy(target).to(torch.int64)
 
         return img, target
 
