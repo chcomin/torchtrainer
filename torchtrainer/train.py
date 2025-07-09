@@ -754,6 +754,8 @@ class DefaultTrainer:
                                 'you login to wandb by running "wandb login" in the terminal.') 
         group.add_argument("--wandb_project", default="uncategorized", 
                            help="Name of the wandb project to log the data.")
+        group.add_argument("--wandb_group", default=None, metavar="STRING", 
+                        help="Name of the wandb group to log the data.")
         group.add_argument("--disable_tqdm", action="store_true", 
                            help="Disable tqdm progressbar.")
         parser.add_argument("--meta", default="", nargs="*", action=ParseText, 

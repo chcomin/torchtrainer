@@ -437,6 +437,7 @@ def setup_wandb(args, run_path):
     wandb_project = args.wandb_project
     experiment_name = args.experiment_name
     run_name = args.run_name
+    group = args.wandb_group
 
     wandb_run_name = f"{experiment_name}/{run_name}"
 
@@ -465,6 +466,7 @@ def setup_wandb(args, run_path):
         dir = str(run_path),
         name = wandb_run_name,
         notes = args.meta,
+        group = group,
         # track hyperparameters and run metadata
         config=args
     )
