@@ -633,8 +633,9 @@ class DefaultTrainer:
                 checkpoint = module_runner.state_dict()
 
                 # Save the checkpoint and a copy of it if required
-                if args.save_checkpoint:
+                if args.save_checkpoint:                    
                     torch.save(checkpoint, run_path/"checkpoint.pt")
+                    print("checkpoint saved")
                     if args.copy_model_every and epoch%args.copy_model_every==0:
                         torch.save(checkpoint, run_path/"models"/f"checkpoint_{epoch}.pt")
 
@@ -744,7 +745,7 @@ class DefaultTrainer:
                            help="Save a copy of the model every N epochs. If 0 (default) no "
                            "copies are saved")
         group.add_argument("--save_checkpoint", action="store_true",
-                   help="Save a checkpoint of the model during training")
+                   help="Save a checkpoint of the model during training.")
         group.add_argument("--save_best_checkpoint", action="store_true", 
                            help="Save the best checkpoint of the model during training. "
                                 "The best checkpoint is the one with the best validation metric "
@@ -754,8 +755,8 @@ class DefaultTrainer:
                                 'you login to wandb by running "wandb login" in the terminal.') 
         group.add_argument("--wandb_project", default="uncategorized", 
                            help="Name of the wandb project to log the data.")
-        group.add_argument("--wandb_group", default=None, metavar="STRING", 
-                        help="Name of the wandb group to log the data.")
+        group.add_argument("--wandb_group", default=None, nargs="*", action=ParseText, 
+                           help="Name of the wandb group to log the data.")
         group.add_argument("--disable_tqdm", action="store_true", 
                            help="Disable tqdm progressbar.")
         parser.add_argument("--meta", default="", nargs="*", action=ParseText, 
