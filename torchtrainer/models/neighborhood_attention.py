@@ -1,4 +1,6 @@
-import logging 
+"""Local attention using the natten library"""
+import logging
+
 from natten import NeighborhoodAttention2D, use_fused_na
 from natten.types import CausalArg2DTypeOrDed, Dimension2DTypeOrDed
 
@@ -6,11 +8,13 @@ from natten.types import CausalArg2DTypeOrDed, Dimension2DTypeOrDed
 logging.getLogger("natten.context").setLevel(logging.ERROR)
 
 #kv_parallel=True uses more memory but is faster
-use_fused_na(True, kv_parallel=True, use_flex_attention=False)
+#use_fused_na(True, kv_parallel=True, use_flex_attention=False)
+use_fused_na(False)
 
 class NeighborhoodAttention(NeighborhoodAttention2D):
     """Adapter class for NeighborhoodAttention2D to work with 2D sequences that have already
-    been transformed to 1D sequences."""
+    been transformed to 1D sequences.
+    """
 
     def __init__(
         self,
