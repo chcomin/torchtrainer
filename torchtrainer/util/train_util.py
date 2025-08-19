@@ -439,6 +439,9 @@ def setup_wandb(args, run_path):
     run_name = args.run_name
     group = args.wandb_group
 
+    if group == "":
+        group = None
+
     wandb_run_name = f"{experiment_name}/{run_name}"
 
     os.environ["WANDB_SILENT"] = "True"

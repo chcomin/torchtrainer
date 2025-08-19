@@ -266,7 +266,7 @@ class DefaultTrainer:
             for idx in args.val_img_indices:
                 Path.mkdir(run_path/"images"/f"image_{idx}", exist_ok=True)
             
-        if args.copy_model_every:
+        if args.copy_model_every and not args.suppress_checkpoint:
             Path.mkdir(run_path/"models", exist_ok=True)
 
         # Register training start time
@@ -633,9 +633,8 @@ class DefaultTrainer:
                 checkpoint = module_runner.state_dict()
 
                 # Save the checkpoint and a copy of it if required
-                if args.save_checkpoint:                    
+                if not args.suppress_checkpoint:                    
                     torch.save(checkpoint, run_path/"checkpoint.pt")
-                    print("checkpoint saved")
                     if args.copy_model_every and epoch%args.copy_model_every==0:
                         torch.save(checkpoint, run_path/"models"/f"checkpoint_{epoch}.pt")
 
@@ -648,7 +647,7 @@ class DefaultTrainer:
                     # Check for model improvement
                     val_metric = last_metrics[val_metric_name]
                     if compare(val_metric, best_val_metric):
-                        if args.save_best_checkpoint:
+                        if not args.suppress_best_checkpoint:
                             torch.save(checkpoint, run_path/"best_model.pt")
                         best_val_metric = val_metric
                         epochs_without_improvement = 0
@@ -741,21 +740,22 @@ class DefaultTrainer:
                            help="Save some validation images when validating")
         group.add_argument("--val_img_indices", nargs="*", type=int, default=(0,), 
                            metavar="N N N", help="Indices of the validation images to save")
+        group.add_argument("--suppress_checkpoint", action="store_true",
+                   help="Suppress model checkpoint saving at the end of each epoch.")
         group.add_argument("--copy_model_every", type=int, default=0, metavar="N", 
                            help="Save a copy of the model every N epochs. If 0 (default) no "
-                           "copies are saved")
-        group.add_argument("--save_checkpoint", action="store_true",
-                   help="Save a checkpoint of the model during training.")
-        group.add_argument("--save_best_checkpoint", action="store_true", 
-                           help="Save the best checkpoint of the model during training. "
-                                "The best checkpoint is the one with the best validation metric "
-                                "according to the --validation_metric argument")
+                           "copies are saved. Has no effect if --suppress_checkpoint is True.")
+        group.add_argument("--suppress_best_checkpoint", action="store_true", 
+                           help="Avoid saving the best checkpoint of the model found during "
+                                "training. The best checkpoint is the one with the best validation "
+                                "metric according to the --validation_metric argument. This option "
+                                "is useful, for instance, when doing hyperparameter sweeps.")
         group.add_argument("--log_wandb", action="store_true", 
-                           help='If wandb should also be used for logging. Please make sure that '
-                                'you login to wandb by running "wandb login" in the terminal.') 
+                           help="If wandb should also be used for logging. Please make sure that "
+                                "you login to wandb by running 'wandb login' in the terminal.")
         group.add_argument("--wandb_project", default="uncategorized", 
                            help="Name of the wandb project to log the data.")
-        group.add_argument("--wandb_group", default=None, nargs="*", action=ParseText, 
+        group.add_argument("--wandb_group", default="", nargs="*", action=ParseText, 
                            help="Name of the wandb group to log the data.")
         group.add_argument("--disable_tqdm", action="store_true", 
                            help="Disable tqdm progressbar.")
