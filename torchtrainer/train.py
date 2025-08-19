@@ -633,9 +633,11 @@ class DefaultTrainer:
                 checkpoint = module_runner.state_dict()
 
                 # Save the checkpoint and a copy of it if required
-                torch.save(checkpoint, run_path/"checkpoint.pt")
-                if args.copy_model_every and epoch%args.copy_model_every==0:
-                    torch.save(checkpoint, run_path/"models"/f"checkpoint_{epoch}.pt")
+                if args.save_checkpoint:                    
+                    torch.save(checkpoint, run_path/"checkpoint.pt")
+                    print("checkpoint saved")
+                    if args.copy_model_every and epoch%args.copy_model_every==0:
+                        torch.save(checkpoint, run_path/"models"/f"checkpoint_{epoch}.pt")
 
                 if validate:
                     if args.save_val_imgs:
@@ -646,7 +648,8 @@ class DefaultTrainer:
                     # Check for model improvement
                     val_metric = last_metrics[val_metric_name]
                     if compare(val_metric, best_val_metric):
-                        torch.save(checkpoint, run_path/"best_model.pt")
+                        if args.save_best_checkpoint:
+                            torch.save(checkpoint, run_path/"best_model.pt")
                         best_val_metric = val_metric
                         epochs_without_improvement = 0
                     else:
@@ -741,11 +744,19 @@ class DefaultTrainer:
         group.add_argument("--copy_model_every", type=int, default=0, metavar="N", 
                            help="Save a copy of the model every N epochs. If 0 (default) no "
                            "copies are saved")
+        group.add_argument("--save_checkpoint", action="store_true",
+                   help="Save a checkpoint of the model during training.")
+        group.add_argument("--save_best_checkpoint", action="store_true", 
+                           help="Save the best checkpoint of the model during training. "
+                                "The best checkpoint is the one with the best validation metric "
+                                "according to the --validation_metric argument")
         group.add_argument("--log_wandb", action="store_true", 
                            help='If wandb should also be used for logging. Please make sure that '
                                 'you login to wandb by running "wandb login" in the terminal.') 
         group.add_argument("--wandb_project", default="uncategorized", 
                            help="Name of the wandb project to log the data.")
+        group.add_argument("--wandb_group", default=None, nargs="*", action=ParseText, 
+                           help="Name of the wandb group to log the data.")
         group.add_argument("--disable_tqdm", action="store_true", 
                            help="Disable tqdm progressbar.")
         parser.add_argument("--meta", default="", nargs="*", action=ParseText, 
