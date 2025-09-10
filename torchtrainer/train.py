@@ -6,12 +6,10 @@ Please see the DefaultTrainer class for more information on how to use this scri
 import argparse
 import operator
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import torch
-import torch.utils
 import yaml
 from torch import nn
 from torch.utils.data import DataLoader
@@ -389,11 +387,12 @@ class DefaultTrainer:
                 torch.tensor(class_weights, device=args.device), ignore_index=ignore_index)
         elif loss_function=="bce":
             if ignore_index!=-100:
-                # TODO: fix:If the dataset uses -100 as ignore_index, this message is not shown
+                # TODO: fix: If the dataset uses -100 as ignore_index, this message is not shown
                 raise ValueError("The BCE loss does not support ignore_index")
             # We use class_weights[1]/class_weights[0] for class 1 because the weight of 
             # class 0 in BCE is always 1
-            loss_func = nn.BCEWithLogitsLoss(pos_weight=class_weights[1]/class_weights[0])
+            pos_weight = torch.tensor(class_weights[1]/class_weights[0], device=args.device)
+            loss_func = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         else:
             raise ValueError(f"Loss function {loss_function} not recognized")
 
