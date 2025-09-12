@@ -1,6 +1,5 @@
 """MedSAM model definition and loading function."""
 
-import os
 from pathlib import Path
 
 import torch
@@ -137,7 +136,7 @@ def get_model(img_size = (1024, 1024), freeze_image_encoder = False) -> MedSAM:
 
     Returns
     -------
-      MedSAM: The model.
+      medsam_model: The model.
     """
 
     script_directory = Path(__file__).parent.resolve()
