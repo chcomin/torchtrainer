@@ -237,7 +237,7 @@ def get_main_resunet_modules(model, depth=1, include_decoder=True):
         depth (int): When depth=1, each stage of the encoder and decoder is returned.
         When depth=2, all residual blocks of the model are returned.
 
-    Returns
+    Returns:
     -------
         list: List of modules
     """

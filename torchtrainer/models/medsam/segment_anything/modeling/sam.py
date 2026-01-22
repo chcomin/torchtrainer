@@ -25,8 +25,7 @@ class Sam(nn.Module):
         pixel_mean: list[float] = (123.675, 116.28, 103.53),
         pixel_std: list[float] = (58.395, 57.12, 57.375),
     ) -> None:
-        """
-        SAM predicts object masks from an image and input prompts.
+        """SAM predicts object masks from an image and input prompts.
 
         Arguments:
           image_encoder (ImageEncoderViT): The backbone used to encode the
@@ -56,8 +55,7 @@ class Sam(nn.Module):
         batched_input: list[dict[str, Any]],
         multimask_output: bool,
     ) -> list[dict[str, torch.Tensor]]:
-        """
-        Predicts masks end-to-end from provided images and prompts.
+        """Predicts masks end-to-end from provided images and prompts.
         If prompts are not known in advance, using SamPredictor is
         recommended over calling the model directly.
 
@@ -82,7 +80,7 @@ class Sam(nn.Module):
           multimask_output (bool): Whether the model should predict multiple
             disambiguating masks, or return a single mask.
 
-        Returns
+        Returns:
         -------
           (list(dict)): A list over input images, where each element is
             as dictionary with the following keys.
@@ -140,8 +138,7 @@ class Sam(nn.Module):
         input_size: tuple[int, ...],
         original_size: tuple[int, ...],
     ) -> torch.Tensor:
-        """
-        Remove padding and upscale masks to the original image size.
+        """Remove padding and upscale masks to the original image size.
 
         Parameters
         ----------
@@ -152,7 +149,7 @@ class Sam(nn.Module):
           original_size (tuple(int, int)): The original size of the image
             before resizing for input to the model, in (H, W) format.
 
-        Returns
+        Returns:
         -------
           (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
             is given by original_size.

@@ -35,8 +35,7 @@ class RetinaDataset(Dataset):
         files: list | None = None,
         transforms: Callable | None = None,
     ):
-        """
-        root
+        """root
             Root directory.
         split
             The split to use. Possible values are "train", "test" and "all"
@@ -342,8 +341,7 @@ class VessMAP(Dataset):
         files: list | None = None,
         transforms: Callable | None = None,
     ):
-        """
-        root
+        """root
             Root directory.
         keepdim
             If True, keeps the channel dimension of the image
@@ -420,8 +418,7 @@ class CORTEX(Dataset):
         files: list | None = None,
         transforms: Callable | None = None,
     ):
-        """
-        root
+        """root
             Root directory.
         keepdim
             If True, keeps the channel dimension of the image

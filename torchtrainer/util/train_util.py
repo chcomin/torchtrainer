@@ -108,7 +108,7 @@ class Logger:
     def get_data(self):
         """Returns a pandas dataframe with the logged data.
 
-        Returns
+        Returns:
         -------
         pd.DataFrame
             The dataframe
@@ -138,8 +138,7 @@ class LoggerPlotter:
     """Plot data logged into a Logger object."""
 
     def __init__(self, groups):
-        """
-        In order to organize the plots, it is necessary to group the metrics.
+        """In order to organize the plots, it is necessary to group the metrics.
         `groups` is a list of dictionaries. Each dictionary has two keys:
         `names` is a list of the names of the metrics to be plotted together.
         `y_max` is the maximum value for the y-axis.
@@ -194,12 +193,11 @@ class Subset(Dataset):
     """Create a new Dataset containing a subset of images from the input Dataset."""
 
     def __init__(self, ds, indices, transforms=None, **attributes):
-        """
-        Args:
-            ds : input Dataset
-            indices: indices to use for the new dataset
-            transforms: transformations to apply to the data. Defaults to None.
-            attributes: additional attributes to store in the new dataset.
+        """Args:
+        ds : input Dataset
+        indices: indices to use for the new dataset
+        transforms: transformations to apply to the data. Defaults to None.
+        attributes: additional attributes to store in the new dataset.
         """
 
         self.ds = ds
@@ -248,8 +246,7 @@ class SingleMetric:
     """Class for storing a function representing a performance metric."""
 
     def __init__(self, metric_name, func):
-        """
-        Create a SingleMetric object from a performance function.
+        """Create a SingleMetric object from a performance function.
 
         Parameters
         ----------
@@ -266,8 +263,7 @@ class MultipleMetrics:
     """Class for storing a function that calculates many performance metrics in one call."""
 
     def __init__(self, metric_names, func):
-        """
-        Create a MultipleMetrics object from a performance function.
+        """Create a MultipleMetrics object from a performance function.
 
         Parameters
         ----------
@@ -313,7 +309,7 @@ def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
         List of positional arguments names. This is necessary because the keys
         of positional arguments are not used in the command line.
 
-    Returns
+    Returns:
     -------
         List of strings with the parameters
     """
@@ -341,8 +337,7 @@ def dict_to_argv(param_dict: dict, positional_args: list | None = None) -> list:
     return sys_argv
 
 def seed_all(seed):
-    """
-    Seed all random number generators for reproducibility. If deterministic is
+    """Seed all random number generators for reproducibility. If deterministic is
     True, set cuDNN to deterministic mode.
     """
     torch.manual_seed(seed)
@@ -350,8 +345,7 @@ def seed_all(seed):
     np.random.seed(seed)
     
 def seed_worker(worker_id):
-    """
-    Set Python and numpy seeds for dataloader workers. Each worker receives a 
+    """Set Python and numpy seeds for dataloader workers. Each worker receives a 
     different seed in initial_seed().
     """
     worker_seed = torch.initial_seed() % 2**32

@@ -1,14 +1,12 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+
 import torch
 import torch.nn as nn
-
-from typing import Type
 
 
 class MLPBlock(nn.Module):
@@ -16,7 +14,7 @@ class MLPBlock(nn.Module):
         self,
         embedding_dim: int,
         mlp_dim: int,
-        act: Type[nn.Module] = nn.GELU,
+        act: type[nn.Module] = nn.GELU,
     ) -> None:
         super().__init__()
         self.lin1 = nn.Linear(embedding_dim, mlp_dim)

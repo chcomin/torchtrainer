@@ -12,8 +12,7 @@ class ClDice:
     """Calculate the cldice metric for a batch of data."""
     
     def __init__(self, reduction: str = "mean"):
-        """
-        Parameters
+        """Parameters
         ----------
         reduction
             Reduction method. Can be 'mean' or 'none'.
@@ -25,8 +24,7 @@ class ClDice:
             scores: CpuOrCudaTensor, 
             targets: CpuOrCudaTensor
             ) -> np.ndarray | float:
-        """
-        Parameters
+        """Parameters
         ----------
         scores
             Output from a network. Dimension 1 is treated as the class dimension.

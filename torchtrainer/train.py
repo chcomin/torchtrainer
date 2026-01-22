@@ -1,5 +1,4 @@
-"""
-Script for training PyTorch models.
+"""Script for training PyTorch models.
 Please see the DefaultTrainer class for more information on how to use this script.
 """
 
@@ -101,8 +100,8 @@ class DefaultModuleRunner:
             with profiler.section(f"data_{batch_idx}"):
                 imgs, targets = next(dl_iter)
 
-            imgs = imgs.to(self.device)
-            targets = targets.to(self.device)
+            imgs = imgs.to(self.device, non_blocking=True)
+            targets = targets.to(self.device, non_blocking=True)
 
             with profiler.section(f"forward_{batch_idx}"):
                 self.optim.zero_grad()
@@ -145,8 +144,8 @@ class DefaultModuleRunner:
             with profiler.section(f"data_{batch_idx}"):
                 imgs, targets = next(dl_iter)
 
-            imgs = imgs.to(self.device)
-            targets = targets.to(self.device)
+            imgs = imgs.to(self.device, non_blocking=True)
+            targets = targets.to(self.device, non_blocking=True)
 
             with profiler.section(f"forward_{batch_idx}"):
                 scores = self.model(imgs)
@@ -172,7 +171,7 @@ class DefaultModuleRunner:
         batch_device = batch.device
 
         model.eval()
-        output = model(batch.to(self.device)).to(batch_device)
+        output = model(batch.to(self.device)).to(batch_device, non_blocking=True)
 
         model.train(training)
 
@@ -194,8 +193,7 @@ class DefaultTrainer:
     """Class for setting up all components of a training experiment."""
 
     def __init__(self, param_dict: dict | None = None):
-        """
-        The class can be initialized from the command line as 
+        """The class can be initialized from the command line as 
         
         python trainer.py --param1 value1 --param2 value2...
 
@@ -684,7 +682,7 @@ class DefaultTrainer:
         param_dict
             A dictionary containing the command line arguments to parse.
 
-        Returns
+        Returns:
         -------
         args
             An argparse namespace object containing the parsed arguments
@@ -840,8 +838,9 @@ class DefaultTrainer:
                            help="If cuda benchmark should be used")
         group.add_argument("--profile", action="store_true", 
                            help="If set, enable the profile mode. This will run the training loop "
-                                "for two epochs and create train.json and validation.json files."
-                                "The files can be opened in https://ui.perfetto.dev/")
+                                "for two epochs and create train.pt.trace.json and "
+                                "validation.pt.trace.json files. The files can be opened in "
+                                "tensorboard or https://ui.perfetto.dev/")
         group.add_argument("--profile_batches", type=int, default=3, metavar="N", 
                            help="Number of batches to profile if --profile is set. Note that there "
                                 "must be at least profile_batches+2 batches in an epoch for the "

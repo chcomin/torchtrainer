@@ -97,7 +97,7 @@ def predict_tta(model, img, transforms, type="probs"):
     type
         The values used for TTA averaging. Options are 'probs' or 'logits'
 
-    Returns
+    Returns:
     -------
     avg_scores
         The predicted scores averaged over the transformations
@@ -127,8 +127,7 @@ def predict_tta(model, img, transforms, type="probs"):
 
 @torch.no_grad()
 def find_optimal_threshold(model, ds, ignore_index=None, device="cuda") -> float:
-    """
-    Find the optimal threshold to apply to model predictions so as to maximize
+    """Find the optimal threshold to apply to model predictions so as to maximize
     the Dice score.
 
     Parameters

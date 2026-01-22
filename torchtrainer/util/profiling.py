@@ -42,8 +42,7 @@ class Profiler:
             with_stack: bool = True,
             enabled: bool = True
             ):
-        """
-        Parameters
+        """Parameters
         ----------
         num_steps
             Number of steps to profile.
@@ -93,7 +92,7 @@ class Profiler:
         if not self.enabled: 
             return
         
-        trace_file = str(self.trace_path/f"{trace_name}.json")
+        trace_file = str(self.trace_path/f"{trace_name}.pt.trace.json")
         self.profiler = pt_profile(
             **self._pytorch_profiler_args,
             on_trace_ready=lambda x: x.export_chrome_trace(trace_file)
@@ -133,8 +132,7 @@ def profile_model(
         device: str = "cuda", 
         use_float16: bool = False
         ) -> str:
-    """
-    Profile model execution using the Pytorch profiler and prints the results on the screen. 
+    """Profile model execution using the Pytorch profiler and prints the results on the screen. 
     The model will be called as ``res = model(input).sum()``, with an optional call 
     to res.backward().
 
@@ -151,7 +149,7 @@ def profile_model(
         device: device to profile. Can be ``cpu`` or ``cuda``.
         use_float16: set if half precision should be used for the forward pass.
 
-    Returns
+    Returns:
     -------
         The result table as a string
     """
@@ -226,8 +224,7 @@ def benchmark_model(
         use_float16: bool = False, 
         return_model_info: bool = False
         ) -> dict:
-    """
-    Benchmark model execution and returns the results in a dictionary. The model will be called as 
+    """Benchmark model execution and returns the results in a dictionary. The model will be called as 
     ``res = model(input).sum()``, with an optional call to res.backward().
 
     Parameters
@@ -242,7 +239,7 @@ def benchmark_model(
         return_model_info: if False, do not measure number of parameters, activations and flops, 
             which takes some extra time.
 
-    Returns
+    Returns:
     -------
         A dictionary containing:
           params: number of parameters in the model.
@@ -332,8 +329,7 @@ def benchmark_model(
     return stats
 
 def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = False) -> dict:
-    """
-    Benchmark function execution and returns the results as a dictionary or as a string. 
+    """Benchmark function execution and returns the results as a dictionary or as a string. 
 
     *Note: the function is executed two times. The first execution is necessary as a warmup. 
     Only the second execution is benchmarked.
@@ -345,7 +341,7 @@ def benchmark_function(func: Callable, func_params: tuple = (), profile: bool = 
           max gpu memory used and cpu and gpu times.
         func_params: tuple containing input parameters for executing the function.
 
-    Returns
+    Returns:
     -------
         If `profile=True`, returns a string containing the result of the Pytorch's profiler. 
         If false, returns a dictionary containing:

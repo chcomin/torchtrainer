@@ -89,7 +89,7 @@ class ReceptiveField:
     device: str
         The device to use.
 
-    Returns
+    Returns:
     -------
     rf: torch.tensor
         An image containing the receptive field.
@@ -161,7 +161,7 @@ class ReceptiveField:
         pixel: (int, int)
             Which activation pixel to use. If not provided, uses pixel at the center.
 
-        Returns
+        Returns:
         -------
         rf: torch.tensor
             An image containing the receptive field.

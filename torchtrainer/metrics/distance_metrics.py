@@ -38,8 +38,7 @@ class DistanceMetrics:
         spacing: tuple = (1., 1.), 
         percent: float = 100.,
         reduction: str = "mean"):
-        """
-        Parameters
+        """Parameters
         ----------
         tolerance
             Maximum distance to consider two surfaces as overlapping. In others
@@ -115,7 +114,7 @@ def _compute_bounding_box(mask):
     mask: The 2D or 3D numpy mask, where '0' means background and non-zero means
       foreground.
 
-  Returns
+  Returns:
   -------
     A tuple:
      - The coordinates of the first point of the bounding box (smallest on all
@@ -182,7 +181,7 @@ def _sort_distances_surfels(distances, surfel_areas):
     distances: The distances from A to B (e.g. `distances_gt_to_pred`).
     surfel_areas: The surfel areas for A (e.g. `surfel_areas_gt`).
 
-  Returns
+  Returns:
   -------
     A tuple of the sorted (distances, surfel_areas).
   """
@@ -216,7 +215,7 @@ def compute_surface_distances(mask_gt,
     spacing_mm: 2-element (resp. 3-element) list-like structure. Voxel spacing
       in x0 anx x1 (resp. x0, x1 and x2) directions.
 
-  Returns
+  Returns:
   -------
     A dict with:
     "distances_gt_to_pred": 1-dim numpy array of type float. The distances in mm
@@ -232,7 +231,7 @@ def compute_surface_distances(mask_gt,
       of the predicted contours in mm (resp. the surface elements area in
       mm^2) in the same order as distances_gt_to_pred.
 
-  Raises
+  Raises:
   ------
     ValueError: If the masks and the `spacing_mm` arguments are of incompatible
       shape or type. Or if the masks are not 2D or 3D.
@@ -357,7 +356,7 @@ def compute_average_surface_distance(surface_distances):
     "surfel_areas_gt", "surfel_areas_pred" created by
     compute_surface_distances()
 
-  Returns
+  Returns:
   -------
     A tuple with two float values:
       - the average distance (in mm) from the ground truth surface to the
@@ -392,7 +391,7 @@ def compute_robust_hausdorff(surface_distances, percent):
       compute_surface_distances()
     percent: a float value between 0 and 100.
 
-  Returns
+  Returns:
   -------
     a float value. The robust Hausdorff distance in mm.
   """
@@ -435,7 +434,7 @@ def compute_surface_overlap_at_tolerance(surface_distances, tolerance_mm):
       compute_surface_distances()
     tolerance_mm: a float value. The tolerance in mm
 
-  Returns
+  Returns:
   -------
     A tuple of two float values. The overlap fraction in [0.0, 1.0] of the
     ground truth surface with the predicted surface and vice versa.
@@ -470,7 +469,7 @@ def compute_surface_dice_at_tolerance(surface_distances, tolerance_mm):
       compute_surface_distances()
     tolerance_mm: a float value. The tolerance in mm
 
-  Returns
+  Returns:
   -------
     A float value. The surface DICE coefficient in [0.0, 1.0].
   """

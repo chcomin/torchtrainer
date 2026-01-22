@@ -17,9 +17,7 @@ class OxfordIIITPetSeg(Dataset):
     """Main class for loading the Oxford Pets segmentation dataset."""
 
     def __init__(self, root, transforms=None, ignore_val=2):
-        """
-
-        Parameters
+        """Parameters
         ----------
         root
             Dataset root folder
@@ -131,7 +129,7 @@ def cat_list(images, fill_value=0):
     fill_value, optional
        How to pad the images
        
-    Returns
+    Returns:
     -------
         Batched images as a tensor
     """

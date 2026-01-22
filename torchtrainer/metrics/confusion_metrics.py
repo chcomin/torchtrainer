@@ -26,7 +26,7 @@ class ConfusionMatrixMetrics:
         ignore_index
             Index on target to ignore when calculating the metrics.
 
-        Returns
+        Returns:
         -------
             A tuple (acc, iou, prec, rec, dice) containing the accuracy, IoU, 
             precision, recall, and Dice scores.
@@ -39,8 +39,7 @@ class ConfusionMatrixMetrics:
             scores: CpuOrCudaTensor, 
             targets: CpuOrCudaTensor
             ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters
+        """Parameters
         ----------
         scores
             Output of a network.
@@ -60,8 +59,7 @@ class AveragePrecisionScore:
             ignore_index: int | None = None,
             average: str = "macro", 
             sample_weight = None):
-        """
-        Parameters
+        """Parameters
         ----------
         task
             Type of classification. Options are 'binary' or 'multilabel'.
@@ -99,8 +97,7 @@ class BalancedAccuracyScore:
             threshold: float = 0.5, 
             ignore_index: int | None = None,
             sample_weight = None):
-        """
-        Parameters
+        """Parameters
         ----------
         threshold
             Threshold to apply to the predictions
@@ -126,8 +123,7 @@ class BalancedAccuracyScore:
         return metrics.balanced_accuracy_score(y_true, y_pred, sample_weight=self.sample_weight)
 
 class MathewsCorrcoef:
-    """
-    Calculate the Matthews correlation coefficient for a batch of data.
+    """Calculate the Matthews correlation coefficient for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.matthews_corrcoef.html
     """
 
@@ -136,8 +132,7 @@ class MathewsCorrcoef:
             threshold: float = 0.5, 
             ignore_index: int | None = None,
             sample_weight = None):
-        """
-        Parameters
+        """Parameters
         ----------
         threshold
             Threshold to apply to the predictions
@@ -172,8 +167,7 @@ class PrecisionRecallCurve:
             ignore_index: int | None = None,
             sample_weight = None,
             drop_intermediate: bool = False):
-        """
-        Parameters
+        """Parameters
         ----------
         ignore_index
             Target index to ignore in the calculation
@@ -182,7 +176,7 @@ class PrecisionRecallCurve:
         drop_intermediate
             Whether to drop some suboptimal thresholds
 
-        Returns
+        Returns:
         -------
         precision
             Precision values
@@ -210,8 +204,7 @@ class PrecisionRecallCurve:
             )
 
 class ROCAUCScore:
-    """
-    Calculate the area under the ROC curve for a batch of data.
+    """Calculate the area under the ROC curve for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html
     """
 
@@ -224,8 +217,7 @@ class ROCAUCScore:
             multi_class: str = "raise",
             labels = None
             ):
-        """
-        Parameters
+        """Parameters
         ----------
         task
             Type of classification. Options are 'binary', 'multiclass' or 'multilabel'.
@@ -261,8 +253,7 @@ class ROCAUCScore:
             multi_class=self.multi_class, labels=self.labels)
 
 class ROCCurve:
-    """
-    Compute the ROC curve for a batch of data.
+    """Compute the ROC curve for a batch of data.
     https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_curve.html
     """
 
@@ -271,8 +262,7 @@ class ROCCurve:
             ignore_index: int | None = None,
             sample_weight = None,
             drop_intermediate: bool = True):
-        """
-        Parameters
+        """Parameters
         ----------
         ignore_index
             Target index to ignore in the calculation
@@ -281,7 +271,7 @@ class ROCCurve:
         drop_intermediate
             Whether to drop some suboptimal thresholds
 
-        Returns
+        Returns:
         -------
         fpr
             False positive rate
@@ -348,7 +338,7 @@ def confusion_matrix_metrics(
     ignore_index
         Index on target to ignore when calculating the metrics.
 
-    Returns
+    Returns:
     -------
         A tuple (acc, iou, prec, rec, dice) containing the accuracy, IoU, 
         precision, recall, and Dice scores.
@@ -401,7 +391,7 @@ def confusion_matrix_elements(
     ignore_index
         Index on target to ignore when calculating the metrics.
 
-    Returns
+    Returns:
     -------
         A dictionary containing many metrics (see the source code for a full list).
     """
@@ -465,8 +455,7 @@ def to_sklearn(
         targets,
         ignore_index: int | None = None,
         ):
-    """
-    Convert PyTorch multidimensional tensors to numpy arrays for use with scikit-learn metrics.
+    """Convert PyTorch multidimensional tensors to numpy arrays for use with scikit-learn metrics.
     The following conversions are applied depending on the shape of the input data 
     (... means zero or more dimensions and n means the product of all dimension sizes
     except the class dimension):
@@ -492,7 +481,7 @@ def to_sklearn(
     ignore_index
         Index on target to ignore when calculating metrics. Only supported for binary tasks.
 
-    Returns
+    Returns:
     -------
     y_score
         The same values as in `preds`, but in a shape accepted by scikit-learn.

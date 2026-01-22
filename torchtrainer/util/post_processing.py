@@ -9,8 +9,7 @@ def logits_to_preds(
         threshold: float = 0.5,
         keepdim: bool = True
         ):
-    """
-    Transform logits/scores to probabilities or, optionally, to class predictions.
+    """Transform logits/scores to probabilities or, optionally, to class predictions.
     The function supports binary, multiclass, and multilabel classification.
 
     Parameters
@@ -30,7 +29,7 @@ def logits_to_preds(
         If True, keeps the class dimension when returning the predicted probabilities/indices. 
         If False, removes the class dimension.
 
-    Returns
+    Returns:
     -------
     preds
         The predicted probabilities or class indices.

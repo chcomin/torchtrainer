@@ -1,5 +1,4 @@
-"""
-Reference script to test a trained model.
+"""Reference script to test a trained model.
 Please refer to the get_parser function to see the available arguments.
 """
 
@@ -183,7 +182,7 @@ def get_args(param_dict: dict | None = None) -> argparse.Namespace:
     param_dict
         A dictionary containing the command line arguments to parse.
 
-    Returns
+    Returns:
     -------
     args
         An argparse namespace object containing the parsed arguments

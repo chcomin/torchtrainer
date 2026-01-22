@@ -31,7 +31,7 @@ def pil_img_info(img, print_repr=False):
         If False, only returns a string with the image information. If True,
         also prints the information
 
-    Returns
+    Returns:
     -------
     info_str : string
         Information about the image
@@ -94,7 +94,7 @@ def pil_img_opener(img_file_path, channel=None, convert_gray=False, is_label=Fal
     print_info :  bool
         If True, image information is printed when opening the image.
 
-    Returns
+    Returns:
     -------
     img : PIL.Image
         The PIL image
@@ -233,7 +233,7 @@ def create_grid(tensors, nrow, container_shape, texts=None, padding=2, text_heig
         padding (int, optional):Padding between images in the grid. Defaults to 2 pixels.
         text_height (int, optional): Height of the text. Defaults to 12 pixels.
 
-    Returns
+    Returns:
     -------
         torch.tensor: Tensor containing the grid.
     """

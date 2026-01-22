@@ -148,7 +148,7 @@ def get_model(img_size = (256, 256), freeze_image_encoder = False) -> LiteMedSAM
     freeze_image_encoder
         Whether to freeze the image encoder weights during training. Default is False.
 
-    Returns
+    Returns:
     -------
       medsam_lite_model: The model.
     """

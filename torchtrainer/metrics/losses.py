@@ -173,7 +173,7 @@ def weighted_cross_entropy(input, target, weight=None, epoch=None):
     epoch : int
         Current training epoch
 
-    Returns
+    Returns:
     -------
     loss : float
         The calculated loss

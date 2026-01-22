@@ -16,7 +16,7 @@ def search_files(files: list[str], paths: list[Path]) -> list[int]:
     paths   
         List of paths.
 
-    Returns
+    Returns:
     -------
     List of indices of the files found in the paths list
     """
